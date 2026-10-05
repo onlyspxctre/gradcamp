@@ -1,0 +1,35 @@
+FROM alpine:edge
+
+RUN apk add --no-cache \
+    build-base
+
+RUN rm -rf \
+    /usr/include/arpa \
+    /usr/include/net \
+    /usr/include/netinet \
+    /usr/include/netpacket \
+    /usr/include/netash \
+    /usr/include/sys/socket.h \
+    /usr/include/sys/un.h \
+    /usr/include/sys/ipc.h \
+    /usr/include/sys/shm.h \
+    /usr/include/sys/msg.h \
+    /usr/include/sys/sem.h \
+    /usr/include/sys/ptrace.h \
+    /usr/include/sys/mount.h \
+    /usr/include/sys/reboot.h \
+    /usr/include/sys/capability.h \
+    /usr/include/dlfcn.h
+
+RUN rm -rf /sbin/apk /etc/apk /lib/apk /var/cache/apk/*
+
+RUN adduser -D -u 1000 -s /bin/sh grader && \
+    mkdir -p /workspace/src /workspace/bin && \
+    chown -R grader:grader /workspace
+# TODO: add some compile helper script
+
+USER grader
+WORKDIR /workspace
+
+ENV TMPDIR=/tmp
+ENTRYPOINT gcc -static -o /workspace/bin/main /workspace/src/main.c

@@ -1,0 +1,30 @@
+FROM alpine:edge
+
+# Optional: Add C++ standard library runtime if running dynamically linked C++ code.
+# For statically linked code (e.g. gcc -static), alpine base libc (musl) is sufficient.
+# RUN apk add --no-cache libgcc libstdc++
+
+RUN rm -rf /sbin/apk /etc/apk /lib/apk /var/cache/apk/*
+
+# strip SUID and SGID permissions across the image
+RUN find / -perm /6000 -type f -exec chmod a-s {} + 2>/dev/null || true
+
+RUN adduser -D -u 1000 -s /bin/sh grader && \
+    mkdir -p /workspace/bin /workspace/tests /workspace/out && \
+    chown -R grader:grader /workspace
+
+COPY grader.sh /usr/local/bin/grader.sh
+RUN chmod 0755 /usr/local/bin/grader.sh
+
+# 5. Drop privileges
+USER grader
+WORKDIR /workspace
+
+ENV TMPDIR=/tmp \
+    BIN_PATH=/workspace/bin/main \
+    TESTS_DIR=/workspace/tests \
+    TIMEOUT_SEC=2 \
+    MAX_OUTPUT_BYTES=1048576 \
+    RESULTS_FILE=/tmp/results.json
+
+ENTRYPOINT ["/usr/local/bin/grader.sh"]
