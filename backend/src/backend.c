@@ -45,38 +45,87 @@ void on_fetch(fio_http_s *h) {
         return;
     }
 
-    redisReply *res = redisCommand(redis_ctx, "HGET job:0 status");
+    redisReply *res = redisCommand(redis_ctx, "HGET job:0 status"); // TODO: hardcoded job UUID
+    if (!res) {
+        fprintf(stderr, "HGET job status command failed\n");
+        fio_http_status_set(h, 500);
+        fio_http_write(h, fio_string_from_cstr("Internal Server Error"), .finish = 1);
+        return;
+    }
 
     if (res->type == REDIS_REPLY_NIL) {
+        freeReplyObject(res);
         fio_http_status_set(h, 404);
         fio_http_write(h, fio_string_from_cstr("No job found!"), .finish = 1);
         return;
     }
     if (res->type != REDIS_REPLY_STRING) {
+        fprintf(stderr, "HGET job status wasn't string...\n");
+        freeReplyObject(res);
         fio_http_status_set(h, 500);
-        fio_http_write(h, fio_string_from_cstr("Something went wrong..."), .finish = 1);
+        fio_http_write(h, fio_string_from_cstr("Internal Server Error"), .finish = 1);
         return;
     }
 
     yyjson_mut_doc *json = yyjson_mut_doc_new(NULL);
-    yyjson_mut_val *json_root = yyjson_mut_obj(json);
+    yyjson_mut_val *json_root = json ? yyjson_mut_obj(json) : NULL;
+
+    if (!json || !json_root) {
+        if (json) yyjson_mut_doc_free(json);
+        freeReplyObject(res);
+        fprintf(stderr, "Mutable JSON document instantation failed\n");
+        fio_http_status_set(h, 500);
+        fio_http_write(h, fio_string_from_cstr("Internal Server Error"), .finish = 1);
+        return;
+    }
     yyjson_mut_doc_set_root(json, json_root);
 
     if (strcmp(res->str, "completed") == 0) {
-        yyjson_mut_obj_add_str(json, json_root, "status", "completed");
+        if (!yyjson_mut_obj_add_str(json, json_root, "status", "completed")) {
+            yyjson_mut_doc_free(json);
+            freeReplyObject(res);
+            fio_http_status_set(h, 500);
+            fio_http_write(h, fio_string_from_cstr("Internal Server Error"), .finish = 1);
+            return;
+        }
 
-        yyjson_read_err err;
-        yyjson_doc *results_json = yyjson_read_file("./job/out/results.json", 0, NULL, &err);
+        yyjson_doc *results_json = yyjson_read_file("./job/out/results.json", 0, NULL, NULL); // TODO: hardcoded job dir
+        yyjson_val *results_json_root = results_json ? yyjson_doc_get_root(results_json) : NULL;
 
-        yyjson_mut_val *mut_results_json_root = yyjson_val_mut_copy(json, yyjson_doc_get_root(results_json));
-        yyjson_mut_obj_add_val(json, json_root, "results", mut_results_json_root);
+        if (!results_json || !results_json_root) {
+            yyjson_mut_doc_free(json);
+            freeReplyObject(res);
+            if (results_json) yyjson_doc_free(results_json);
+
+            fprintf(stderr, "Failure to read results JSON file\n");
+
+            fio_http_status_set(h, 500);
+            fio_http_write(h, fio_string_from_cstr("Internal Server Error"), .finish = 1);
+            return;
+        }
+
+        yyjson_mut_val *mut_results_json_root = yyjson_val_mut_copy(json, results_json_root);
+        if (mut_results_json_root) {
+            yyjson_mut_obj_add_val(json, json_root, "results", mut_results_json_root);
+        }
 
         yyjson_doc_free(results_json);
-
     } else if (strcmp(res->str, "inprogress") == 0) {
-        yyjson_mut_obj_add_str(json, json_root, "status", "inprogress");
+        if (!yyjson_mut_obj_add_str(json, json_root, "status", "inprogress")) {
+            yyjson_mut_doc_free(json);
+            freeReplyObject(res);
+            fio_http_status_set(h, 500);
+            fio_http_write(h, fio_string_from_cstr("Internal Server Error"), .finish = 1);
+            return;
+        }
     } else if (strcmp(res->str, "pending") == 0) {
-        yyjson_mut_obj_add_str(json, json_root, "status", "pending");
+        if (!yyjson_mut_obj_add_str(json, json_root, "status", "pending")) {
+            yyjson_mut_doc_free(json);
+            freeReplyObject(res);
+            fio_http_status_set(h, 500);
+            fio_http_write(h, fio_string_from_cstr("Internal Server Error"), .finish = 1);
+            return;
+        }
     } else {
         fio_http_status_set(h, 500);
         fio_http_write(h, fio_string_from_cstr("Job is in an unknown state!"), .finish = 1);
@@ -85,8 +134,7 @@ void on_fetch(fio_http_s *h) {
         return;
     }
 
-
-    size_t len;
+    size_t len = 0;
     char *buf = yyjson_mut_write(json, 0, &len);
 
     yyjson_mut_doc_free(json);
@@ -95,7 +143,6 @@ void on_fetch(fio_http_s *h) {
     if (!buf) {
         fio_http_status_set(h, 500);
         fio_http_write(h, fio_string_from_cstr("JSON serialization failed!"), .finish = 1);
-        yyjson_mut_doc_free(json);
     } else {
         fio_http_status_set(h, 200);
         fio_http_response_header_set(h, FIO_STR_INFO1("content-type"), FIO_STR_INFO1("application/json"));
@@ -129,9 +176,18 @@ void on_upload(fio_http_s *h) {
     fio_http_body_seek(h, 0);
     fio_str_info_s chunk = fio_http_body_read(h, (size_t) -1);
     if (chunk.buf && chunk.len) {
-        fwrite(chunk.buf, 1, chunk.len, fp);
+        if (fwrite(chunk.buf, 1, chunk.len, fp) != chunk.len) {
+            fclose(fp);
+            fio_http_status_set(h, 500);
+            fio_http_write(h, fio_string_from_cstr("Failed to write\n"), .finish = 1);
+            return;
+        }
     }
-    fclose(fp);
+    if (fclose(fp) != 0) {
+        fio_http_status_set(h, 500);
+        fio_http_write(h, fio_string_from_cstr("Failed to write\n"), .finish = 1);
+        return;
+    }
 
     redisReply *reply = redisCommand(redis_ctx, "HSET job:0 status pending");
     if (!reply || reply->type == REDIS_REPLY_ERROR) {
@@ -151,37 +207,54 @@ void on_upload(fio_http_s *h) {
     }
     freeReplyObject(reply);
 
-
     fio_http_status_set(h, 200);
     fio_http_write(h, fio_string_from_cstr("Uploaded\n"), .finish = 1);
 }
 
-void handle_sigint(int sig) {
-    (void) sig;
-    redisFree(redis_ctx);
-    fio_io_stop();
+static void cleanup_resources(void *ignored) {
+    (void) ignored;
+    if (redis_ctx) {
+        redisFree(redis_ctx);
+        redis_ctx = NULL;
+    }
 }
 
 int main(void) {
-    signal(SIGINT, &handle_sigint);
-
     redis_ctx = redisConnect("127.0.0.1", 6379);
 
     if (!redis_ctx || redis_ctx->err) {
         fprintf(stderr, "Valkey error: %s\n", redis_ctx ? redis_ctx->errstr : "connection failure");
+        if (redis_ctx) {
+            redisFree(redis_ctx);
+            redis_ctx = NULL;
+        }
         exit(1);
     }
 
     redisReply *reply = redisCommand(redis_ctx, "AUTH foobarbaz");
     if (!reply || reply->type == REDIS_REPLY_ERROR) {
         fprintf(stderr, "Valkey error: %s\n", redis_ctx ? redis_ctx->errstr : "authentication failure");
+        if (reply) freeReplyObject(reply);
+        redisFree(redis_ctx);
+        redis_ctx = NULL;
         exit(1);
     }
+    freeReplyObject(reply);
+
+    fio_state_callback_add(FIO_CALL_AT_EXIT, cleanup_resources, NULL);
 
     printf("Backend listening to Valkey at 127.0.0.1:6379\n");
 
     fio_http_listener_s *listener = fio_http_listen("0.0.0.0:3000", .on_http = on_request, .log = 1);
+    if (!listener) {
+        fprintf(stderr, "Failed to start HTTP listener on 0.0.0.0:3000\n");
+        cleanup_resources(NULL);
+        exit(1);
+    }
     fio_http_route(listener, "/fetch", .on_http = on_fetch);
     fio_http_route(listener, "/upload", .on_http = on_upload);
     fio_io_start(0);
+
+    cleanup_resources(NULL);
+    return 0;
 }
