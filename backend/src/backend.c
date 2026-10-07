@@ -6,7 +6,7 @@
 #include <hiredis.h>
 #include <yyjson.h>
 
-static redisContext *redis_ctx;
+#include "common/hiredis_client.h"
 
 #define fio_string_from_cstr(lit) .buf = "" lit "", .len = sizeof(lit) - 1
 
@@ -211,50 +211,28 @@ void on_upload(fio_http_s *h) {
     fio_http_write(h, fio_string_from_cstr("Uploaded\n"), .finish = 1);
 }
 
-static void cleanup_resources(void *ignored) {
+static void cleanup(void *ignored) {
     (void) ignored;
-    if (redis_ctx) {
-        redisFree(redis_ctx);
-        redis_ctx = NULL;
-    }
+    gradcamp_redis_free();
 }
 
 int main(void) {
-    redis_ctx = redisConnect("127.0.0.1", 6379);
-
-    if (!redis_ctx || redis_ctx->err) {
-        fprintf(stderr, "Valkey error: %s\n", redis_ctx ? redis_ctx->errstr : "connection failure");
-        if (redis_ctx) {
-            redisFree(redis_ctx);
-            redis_ctx = NULL;
-        }
-        exit(1);
+    if (!gradcamp_redis_init()) {
+        return 1;
     }
 
-    redisReply *reply = redisCommand(redis_ctx, "AUTH foobarbaz");
-    if (!reply || reply->type == REDIS_REPLY_ERROR) {
-        fprintf(stderr, "Valkey error: %s\n", redis_ctx ? redis_ctx->errstr : "authentication failure");
-        if (reply) freeReplyObject(reply);
-        redisFree(redis_ctx);
-        redis_ctx = NULL;
-        exit(1);
-    }
-    freeReplyObject(reply);
-
-    fio_state_callback_add(FIO_CALL_AT_EXIT, cleanup_resources, NULL);
-
-    printf("Backend listening to Valkey at 127.0.0.1:6379\n");
+    fio_state_callback_add(FIO_CALL_AT_EXIT, cleanup, NULL);
 
     fio_http_listener_s *listener = fio_http_listen("0.0.0.0:3000", .on_http = on_request, .log = 1);
     if (!listener) {
         fprintf(stderr, "Failed to start HTTP listener on 0.0.0.0:3000\n");
-        cleanup_resources(NULL);
+        cleanup(NULL);
         exit(1);
     }
     fio_http_route(listener, "/fetch", .on_http = on_fetch);
     fio_http_route(listener, "/upload", .on_http = on_upload);
     fio_io_start(0);
 
-    cleanup_resources(NULL);
+    cleanup(NULL);
     return 0;
 }
