@@ -1,3 +1,6 @@
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wstring-conversion"
+
 #define FIO_IO
 #define FIO_HTTP
 #define FIO_NO_TLS 1
@@ -236,3 +239,5 @@ int main(void) {
     cleanup(NULL);
     return 0;
 }
+
+#pragma clang diagnostic pop
