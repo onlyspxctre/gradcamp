@@ -170,6 +170,23 @@ void on_upload(fio_http_s *h) {
         return;
     }
 
+    fio_str_info_s query = fio_http_query(h);
+    fio_buf_info_s job_buf = {0};
+
+    if (query.len) {
+        FIO_URL_QUERY_EACH(FIO_STR2BUF_INFO(query), i) {
+            if (FIO_BUF_INFO_IS_EQ(i.name, FIO_BUF_INFO1("job"))) {
+                job_buf = i.value;
+            }
+        }
+    }
+
+    if (!job_buf.len) {
+        fio_http_status_set(h, 400);
+        fio_http_write(h, fio_string_from_cstr("No job specified!"), .finish = 1);
+        return;
+    }
+
     // TODO: magic byte checking
     FILE *fp = fopen("./job/src/main.c", "wb");
     if (!fp) {
@@ -194,16 +211,17 @@ void on_upload(fio_http_s *h) {
         return;
     }
 
-    redisReply *reply = gradcamp_redis_run_cmd("HSET job:0 status pending");
+
+    redisReply *reply = gradcamp_redis_run_cmd("HSET job:%b status pending", job_buf.buf, job_buf.len);
     if (!reply || reply->type == REDIS_REPLY_ERROR) {
         fio_http_status_set(h, 500);
         if (reply) freeReplyObject(reply);
         fio_http_write(h, fio_string_from_cstr("Pushing job to worker queue failed!\n"), .finish = 1);
         return;
     }
-
     freeReplyObject(reply);
-    reply = gradcamp_redis_run_cmd("LPUSH jobs_pending %s", "{ \"uuid\": \"test\" }");
+
+    reply = gradcamp_redis_run_cmd("LPUSH jobs_pending %s", "{ \"uuid\": \"%b\" }", job_buf.buf, job_buf.len);
     if (!reply || reply->type == REDIS_REPLY_ERROR) {
         fio_http_status_set(h, 500);
         if (reply) freeReplyObject(reply);
