@@ -1,12 +1,10 @@
-.PHONY: all clean backend
+SUBDIRS := common backend
+.PHONY: all clean $(SUBDIRS)
 
 export BUILDDIR := $(CURDIR)/build
 export OBJDIR := $(CURDIR)/obj
 
-all: common backend
+all: $(SUBDIRS)
 
-common:
-	$(MAKE) -C common
-
-backend: common
-	$(MAKE) -C backend
+$(SUBDIRS):
+	$(MAKE) -C $@

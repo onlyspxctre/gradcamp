@@ -7,10 +7,10 @@ LIBS := hiredis yyjson
 
 CC := clang
 CFLAGS := $(CFLAGS) -isystem$(INCLUDEDIR) -I../ $(shell pkg-config --cflags $(LIBS))
-LDLIBS := $(shell pkg-config --libs $(LIBS)) -lm
+LDLIBS := $(OBJDIR)/hiredis_client.o $(shell pkg-config --libs $(LIBS)) -lm
 
 all: $(BUILDDIR)/backend
 
 $(BUILDDIR)/backend: $(SRCDIR)/backend.c $(INCLUDEDIR)/fio-stl.h
 	mkdir -p $(BUILDDIR)
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(SRCDIR)/backend.c $(LDLIBS)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $< $(LDLIBS)
