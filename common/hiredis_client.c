@@ -1,6 +1,6 @@
 #include <hiredis.h>
-#include <stdio.h>
 #include <stdarg.h>
+#include <stdio.h>
 
 #include "hiredis_client.h"
 
@@ -33,7 +33,7 @@ int gradcamp_redis_init() {
     return 0;
 }
 
-redisReply* gradcamp_redis_run_cmd(const char *format, ...) {
+redisReply *gradcamp_redis_run_cmd(const char *format, ...) {
     va_list args;
 
     va_start(args, format);

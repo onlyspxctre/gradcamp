@@ -44,11 +44,13 @@ void on_fetch(fio_http_s *h) {
 
     if (!res_buf.len) {
         fio_http_status_set(h, 400);
-        fio_http_write(h, fio_string_from_cstr("Not job specified!"), .finish = 1);
+        fio_http_write(h, fio_string_from_cstr("No job specified!"), .finish = 1);
         return;
     }
 
-    redisReply *res = gradcamp_redis_run_cmd("HGET job:0 status"); // TODO: hardcoded job UUID
+    printf("%.*s\n", (int) res_buf.len, res_buf.buf);
+
+    redisReply *res = gradcamp_redis_run_cmd("HGET job:%b status", res_buf.buf, res_buf.len);
     if (!res) {
         fprintf(stderr, "HGET job status command failed\n");
         fio_http_status_set(h, 500);
@@ -220,7 +222,7 @@ static void cleanup(void *ignored) {
 }
 
 int main(void) {
-    if (!gradcamp_redis_init()) {
+    if (gradcamp_redis_init() != 0) {
         return 1;
     }
 
