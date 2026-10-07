@@ -45,7 +45,7 @@ void on_fetch(fio_http_s *h) {
         return;
     }
 
-    redisReply *res = redisCommand(redis_ctx, "HGET job:0 status"); // TODO: hardcoded job UUID
+    redisReply *res = gradcamp_redis_run_cmd("HGET job:0 status"); // TODO: hardcoded job UUID
     if (!res) {
         fprintf(stderr, "HGET job status command failed\n");
         fio_http_status_set(h, 500);
@@ -189,7 +189,7 @@ void on_upload(fio_http_s *h) {
         return;
     }
 
-    redisReply *reply = redisCommand(redis_ctx, "HSET job:0 status pending");
+    redisReply *reply = gradcamp_redis_run_cmd("HSET job:0 status pending");
     if (!reply || reply->type == REDIS_REPLY_ERROR) {
         fio_http_status_set(h, 500);
         if (reply) freeReplyObject(reply);
@@ -198,7 +198,7 @@ void on_upload(fio_http_s *h) {
     }
 
     freeReplyObject(reply);
-    reply = redisCommand(redis_ctx, "LPUSH jobs_pending %s", "{ \"uuid\": \"test\" }");
+    reply = gradcamp_redis_run_cmd("LPUSH jobs_pending %s", "{ \"uuid\": \"test\" }");
     if (!reply || reply->type == REDIS_REPLY_ERROR) {
         fio_http_status_set(h, 500);
         if (reply) freeReplyObject(reply);

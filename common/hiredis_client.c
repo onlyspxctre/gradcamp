@@ -1,5 +1,6 @@
 #include <hiredis.h>
 #include <stdio.h>
+#include <stdarg.h>
 
 #include "hiredis_client.h"
 
@@ -30,6 +31,18 @@ int gradcamp_redis_init() {
 
     printf("Gradcamp::Backend listening to Valkey at 127.0.0.1:6379\n");
     return 0;
+}
+
+redisReply* gradcamp_redis_run_cmd(const char *format, ...) {
+    va_list args;
+
+    va_start(args, format);
+
+    redisReply *reply = redisvCommand(g_redis_ctx, format, args);
+
+    va_end(args);
+
+    return reply;
 }
 
 int gradcamp_redis_free() {
