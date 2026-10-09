@@ -69,11 +69,11 @@ export function CodeEditorPane({
   const [customInput, setCustomInput] = useState<string>("")
   const [isCustomCase, setIsCustomCase] = useState<boolean>(false)
 
-  // Vertical resizable console height state (in pixels)
-  const [consoleHeight, setConsoleHeight] = useState<number>(220)
+  const [consoleBodyHeight, setConsoleBodyHeight] = useState<number>(180)
+  const [isDraggingConsole, setIsDraggingConsole] = useState<boolean>(false)
   const isDraggingConsoleRef = useRef<boolean>(false)
   const startDragYRef = useRef<number>(0)
-  const startHeightRef = useRef<number>(220)
+  const startHeightRef = useRef<number>(180)
 
   const editorRef = useRef<Parameters<OnMount>[0] | null>(null)
   const editorContainerRef = useRef<HTMLDivElement>(null)
@@ -94,15 +94,21 @@ export function CodeEditorPane({
     })
   }
 
-  // Re-layout when console toggles or resizes
+  // Re-layout when console height changes or fullscreen toggles
   useEffect(() => {
     if (editorRef.current) {
-      const timer = setTimeout(() => {
-        editorRef.current?.layout()
-      }, 30)
-      return () => clearTimeout(timer)
+      editorRef.current.layout()
     }
-  }, [isConsoleOpen, consoleTab, isFullscreen, consoleHeight])
+  }, [consoleBodyHeight, consoleTab, isFullscreen])
+
+  // Re-layout during and after the 200ms open/close transition
+  useEffect(() => {
+    if (!editorRef.current) return
+    const timer = setTimeout(() => {
+      editorRef.current?.layout()
+    }, 210)
+    return () => clearTimeout(timer)
+  }, [isConsoleOpen])
 
   // ResizeObserver on the container ensures Monaco fills the exact available box
   useEffect(() => {
@@ -120,8 +126,9 @@ export function CodeEditorPane({
   const handleConsoleResizeStart = (e: React.MouseEvent) => {
     e.preventDefault()
     isDraggingConsoleRef.current = true
+    setIsDraggingConsole(true)
     startDragYRef.current = e.clientY
-    startHeightRef.current = consoleHeight
+    startHeightRef.current = consoleBodyHeight
     document.body.style.cursor = "row-resize"
     document.body.style.userSelect = "none"
   }
@@ -131,17 +138,24 @@ export function CodeEditorPane({
     const deltaY = startDragYRef.current - e.clientY // Dragging UP increases height
     const paneTotalHeight = paneContainerRef.current.clientHeight
     const newHeight = Math.min(
-      Math.max(startHeightRef.current + deltaY, 100),
-      paneTotalHeight * 0.75
+      Math.max(startHeightRef.current + deltaY, 60),
+      paneTotalHeight * 0.7
     )
-    setConsoleHeight(newHeight)
+    setConsoleBodyHeight(newHeight)
+    requestAnimationFrame(() => {
+      editorRef.current?.layout()
+    })
   }, [])
 
   const handleMouseUp = useCallback(() => {
     if (isDraggingConsoleRef.current) {
       isDraggingConsoleRef.current = false
+      setIsDraggingConsole(false)
       document.body.style.cursor = ""
       document.body.style.userSelect = ""
+      requestAnimationFrame(() => {
+        editorRef.current?.layout()
+      })
     }
   }, [])
 
@@ -241,6 +255,10 @@ export function CodeEditorPane({
         className="relative min-h-[140px] w-full flex-1 overflow-hidden bg-background"
       >
         <div className="absolute inset-0 h-full w-full">
+          {/* Prevent Monaco from capturing mouse events while resizing */}
+          {isDraggingConsole && (
+            <div className="absolute inset-0 z-30 cursor-row-resize" />
+          )}
           <Editor
             height="100%"
             width="100%"
@@ -292,11 +310,8 @@ export function CodeEditorPane({
         </div>
       )}
 
-      {/* Bottom Console Drawer (Resizable) */}
-      <div
-        style={{ height: isConsoleOpen ? `${consoleHeight}px` : "auto" }}
-        className="flex shrink-0 flex-col border-t border-border bg-background transition-all"
-      >
+      {/* Bottom Console Drawer */}
+      <div className="flex shrink-0 flex-col border-t border-border bg-background">
         {/* Console Header Bar */}
         <div className="flex shrink-0 items-center justify-between border-b border-border/80 bg-muted/20 px-3 py-1.5 text-xs">
           <div className="flex items-center gap-1">
@@ -399,9 +414,16 @@ export function CodeEditorPane({
           </div>
         </div>
 
-        {/* Console Content Body (Shown when open) */}
-        {isConsoleOpen && (
-          <div className="flex-1 space-y-3 overflow-y-auto bg-muted/10 p-3.5 text-xs">
+        {/* Collapsible Console Content Body */}
+        <div
+          style={{ height: isConsoleOpen ? `${consoleBodyHeight}px` : "0px" }}
+          className={`overflow-hidden bg-muted/10 ${
+            isDraggingConsole
+              ? "transition-none select-none"
+              : "transition-[height] duration-200 ease-in-out"
+          }`}
+        >
+          <div className="h-full space-y-3 overflow-y-auto p-3.5 text-xs">
             {/* TAB: TESTCASE */}
             {consoleTab === "testcase" && (
               <div className="space-y-3">
@@ -602,7 +624,7 @@ export function CodeEditorPane({
               </div>
             )}
           </div>
-        )}
+        </div>
       </div>
     </div>
   )
