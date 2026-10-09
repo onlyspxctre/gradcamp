@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef, useEffect, useCallback } from "react"
 import Editor, { type OnMount } from "@monaco-editor/react"
 import {
   Play,
@@ -14,24 +14,17 @@ import {
   CheckCircle2,
   XCircle,
   Loader2,
+  GripHorizontal,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useTheme } from "@/components/theme-provider"
-import { SUPPORTED_LANGUAGES } from "@/data/languages"
-import type {
-  Problem,
-  SupportedLanguage,
-  Submission,
-  ConsoleTab,
-} from "@/types"
+import type { Problem, Submission, ConsoleTab } from "@/types"
 import { SubmissionStatusBadge } from "@/components/common/StatusBadges"
 
 interface CodeEditorPaneProps {
   problem: Problem
   code: string
   setCode: (code: string) => void
-  selectedLanguage: SupportedLanguage
-  setSelectedLanguage: (lang: SupportedLanguage) => void
   onRunCode: () => void
   onSubmitCode: () => void
   onResetCode: () => void
@@ -41,9 +34,8 @@ interface CodeEditorPaneProps {
   submissionStateDetail?: string
   runResult: {
     passed: boolean
-    output: string
-    expected: string
-    durationMs: number
+    output?: string
+    expected?: string
     caseName: string
   } | null
   consoleTab: ConsoleTab
@@ -56,8 +48,6 @@ export function CodeEditorPane({
   problem,
   code,
   setCode,
-  selectedLanguage,
-  setSelectedLanguage,
   onRunCode,
   onSubmitCode,
   onResetCode,
@@ -79,6 +69,16 @@ export function CodeEditorPane({
   const [customInput, setCustomInput] = useState<string>("")
   const [isCustomCase, setIsCustomCase] = useState<boolean>(false)
 
+  // Vertical resizable console height state (in pixels)
+  const [consoleHeight, setConsoleHeight] = useState<number>(220)
+  const isDraggingConsoleRef = useRef<boolean>(false)
+  const startDragYRef = useRef<number>(0)
+  const startHeightRef = useRef<number>(220)
+
+  const editorRef = useRef<Parameters<OnMount>[0] | null>(null)
+  const editorContainerRef = useRef<HTMLDivElement>(null)
+  const paneContainerRef = useRef<HTMLDivElement>(null)
+
   const handleCopy = () => {
     navigator.clipboard.writeText(code)
     setIsCopied(true)
@@ -87,9 +87,6 @@ export function CodeEditorPane({
 
   const currentCase = problem.testCases[selectedCaseIdx] || problem.testCases[0]
 
-  const editorRef = useRef<Parameters<OnMount>[0] | null>(null)
-  const editorContainerRef = useRef<HTMLDivElement>(null)
-
   const handleEditorDidMount: OnMount = (editor) => {
     editorRef.current = editor
     requestAnimationFrame(() => {
@@ -97,17 +94,17 @@ export function CodeEditorPane({
     })
   }
 
-  // Force Monaco to recalculate layout whenever console opens/closes, tab switches, or fullscreen toggles
+  // Re-layout when console toggles or resizes
   useEffect(() => {
     if (editorRef.current) {
       const timer = setTimeout(() => {
         editorRef.current?.layout()
-      }, 50)
+      }, 30)
       return () => clearTimeout(timer)
     }
-  }, [isConsoleOpen, consoleTab, isFullscreen])
+  }, [isConsoleOpen, consoleTab, isFullscreen, consoleHeight])
 
-  // ResizeObserver on the container ensures Monaco smoothly fills the exact dimensions
+  // ResizeObserver on the container ensures Monaco fills the exact available box
   useEffect(() => {
     if (!editorContainerRef.current) return
     const ro = new ResizeObserver(() => {
@@ -119,34 +116,60 @@ export function CodeEditorPane({
     return () => ro.disconnect()
   }, [])
 
+  // Vertical Console Resizer Handlers
+  const handleConsoleResizeStart = (e: React.MouseEvent) => {
+    e.preventDefault()
+    isDraggingConsoleRef.current = true
+    startDragYRef.current = e.clientY
+    startHeightRef.current = consoleHeight
+    document.body.style.cursor = "row-resize"
+    document.body.style.userSelect = "none"
+  }
+
+  const handleMouseMove = useCallback((e: MouseEvent) => {
+    if (!isDraggingConsoleRef.current || !paneContainerRef.current) return
+    const deltaY = startDragYRef.current - e.clientY // Dragging UP increases height
+    const paneTotalHeight = paneContainerRef.current.clientHeight
+    const newHeight = Math.min(
+      Math.max(startHeightRef.current + deltaY, 100),
+      paneTotalHeight * 0.75
+    )
+    setConsoleHeight(newHeight)
+  }, [])
+
+  const handleMouseUp = useCallback(() => {
+    if (isDraggingConsoleRef.current) {
+      isDraggingConsoleRef.current = false
+      document.body.style.cursor = ""
+      document.body.style.userSelect = ""
+    }
+  }, [])
+
+  useEffect(() => {
+    window.addEventListener("mousemove", handleMouseMove)
+    window.addEventListener("mouseup", handleMouseUp)
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove)
+      window.removeEventListener("mouseup", handleMouseUp)
+    }
+  }, [handleMouseMove, handleMouseUp])
+
   return (
     <div
-      className={`flex h-full flex-col overflow-hidden bg-background ${
+      ref={paneContainerRef}
+      className={`flex h-full w-full flex-col overflow-hidden bg-background ${
         isFullscreen ? "fixed inset-0 z-50" : "relative"
       }`}
     >
       {/* Top Editor Toolbar */}
       <div className="flex shrink-0 items-center justify-between border-b border-border bg-muted/30 px-3 py-1.5 text-xs">
-        {/* Language Selector */}
+        {/* Language Indicator: C Only */}
         <div className="flex items-center gap-2">
-          <select
-            value={selectedLanguage.id}
-            onChange={(e) => {
-              const lang = SUPPORTED_LANGUAGES.find(
-                (l) => l.id === e.target.value
-              )
-              if (lang) setSelectedLanguage(lang)
-            }}
-            className="cursor-pointer rounded-md border border-border bg-background px-2.5 py-1 text-xs font-semibold text-foreground focus:ring-1 focus:ring-ring focus:outline-none"
-          >
-            {SUPPORTED_LANGUAGES.map((lang) => (
-              <option key={lang.id} value={lang.id}>
-                {lang.name}
-              </option>
-            ))}
-          </select>
-          <span className="hidden font-mono text-[11px] text-muted-foreground sm:inline">
-            {selectedLanguage.version}
+          <span className="inline-flex items-center rounded bg-primary px-2 py-0.5 font-mono text-xs font-bold text-primary-foreground">
+            C
+          </span>
+          <span className="font-mono text-[11px] text-muted-foreground">
+            GCC / Clang
           </span>
         </div>
 
@@ -170,7 +193,7 @@ export function CodeEditorPane({
             variant="ghost"
             size="xs"
             onClick={onResetCode}
-            title="Reset to problem template"
+            title="Reset code template"
             className="text-muted-foreground hover:text-foreground"
           >
             <RotateCcw className="size-3" />
@@ -215,13 +238,13 @@ export function CodeEditorPane({
       {/* Monaco Code Editor Area */}
       <div
         ref={editorContainerRef}
-        className="relative min-h-[160px] w-full flex-1 overflow-hidden bg-background"
+        className="relative min-h-[140px] w-full flex-1 overflow-hidden bg-background"
       >
         <div className="absolute inset-0 h-full w-full">
           <Editor
             height="100%"
             width="100%"
-            language={selectedLanguage.monacoLang}
+            language="c"
             value={code}
             onChange={(val) => setCode(val ?? "")}
             onMount={handleEditorDidMount}
@@ -251,17 +274,31 @@ export function CodeEditorPane({
             loading={
               <div className="flex h-full w-full items-center justify-center gap-2 text-xs text-muted-foreground">
                 <Loader2 className="size-4 animate-spin" />
-                <span>Loading Monaco Editor...</span>
+                <span>Loading Editor...</span>
               </div>
             }
           />
         </div>
       </div>
 
-      {/* Bottom Console Drawer */}
-      <div className="flex shrink-0 flex-col border-t border-border bg-background transition-all">
+      {/* Draggable Vertical Handle between Editor and Console */}
+      {isConsoleOpen && (
+        <div
+          onMouseDown={handleConsoleResizeStart}
+          className="group flex h-2 w-full cursor-row-resize items-center justify-center border-t border-border/80 bg-muted/40 transition-colors select-none hover:bg-primary/20 active:bg-primary/30"
+          title="Drag vertically to resize console"
+        >
+          <GripHorizontal className="size-3 text-muted-foreground/60 transition-colors group-hover:text-primary" />
+        </div>
+      )}
+
+      {/* Bottom Console Drawer (Resizable) */}
+      <div
+        style={{ height: isConsoleOpen ? `${consoleHeight}px` : "auto" }}
+        className="flex shrink-0 flex-col border-t border-border bg-background transition-all"
+      >
         {/* Console Header Bar */}
-        <div className="flex items-center justify-between border-b border-border/80 bg-muted/20 px-3 py-1.5 text-xs">
+        <div className="flex shrink-0 items-center justify-between border-b border-border/80 bg-muted/20 px-3 py-1.5 text-xs">
           <div className="flex items-center gap-1">
             <button
               onClick={() => setIsConsoleOpen(!isConsoleOpen)}
@@ -341,7 +378,9 @@ export function CodeEditorPane({
               className="gap-1.5 text-xs font-semibold"
             >
               <Play
-                className={`size-3 fill-emerald-500 text-emerald-500 ${isRunning ? "animate-pulse" : ""}`}
+                className={`size-3 fill-emerald-500 text-emerald-500 ${
+                  isRunning ? "animate-pulse" : ""
+                }`}
               />
               <span>{isRunning ? "Running..." : "Run"}</span>
             </Button>
@@ -355,14 +394,14 @@ export function CodeEditorPane({
               <Send
                 className={`size-3 ${isSubmitting ? "animate-bounce" : ""}`}
               />
-              <span>{isSubmitting ? "Evaluating..." : "Submit"}</span>
+              <span>{isSubmitting ? "Submitting..." : "Submit"}</span>
             </Button>
           </div>
         </div>
 
         {/* Console Content Body (Shown when open) */}
         {isConsoleOpen && (
-          <div className="max-h-60 min-h-36 space-y-3 overflow-y-auto bg-muted/10 p-3.5 text-xs">
+          <div className="flex-1 space-y-3 overflow-y-auto bg-muted/10 p-3.5 text-xs">
             {/* TAB: TESTCASE */}
             {consoleTab === "testcase" && (
               <div className="space-y-3">
@@ -400,13 +439,13 @@ export function CodeEditorPane({
                 {isCustomCase ? (
                   <div className="space-y-1.5">
                     <span className="text-[11px] font-semibold text-muted-foreground">
-                      Custom Input Vector:
+                      Custom Input:
                     </span>
                     <textarea
                       value={customInput}
                       onChange={(e) => setCustomInput(e.target.value)}
-                      placeholder="Enter custom input..."
-                      className="h-20 w-full resize-none rounded border border-border bg-background p-2 font-mono text-xs focus:ring-1 focus:ring-ring focus:outline-none"
+                      placeholder="e.g. num1 = 5, num2 = 8"
+                      className="h-16 w-full resize-none rounded border border-border bg-background p-2 font-mono text-xs focus:ring-1 focus:ring-ring focus:outline-none"
                     />
                   </div>
                 ) : (
@@ -415,7 +454,7 @@ export function CodeEditorPane({
                       <span className="text-[11px] font-semibold text-muted-foreground">
                         Input:
                       </span>
-                      <pre className="rounded border border-border/70 bg-muted/40 p-2.5 font-mono text-xs text-foreground">
+                      <pre className="rounded border border-border/70 bg-muted/40 p-2 font-mono text-xs text-foreground">
                         {currentCase.input}
                       </pre>
                     </div>
@@ -438,7 +477,7 @@ export function CodeEditorPane({
                 {isRunning ? (
                   <div className="flex items-center justify-center gap-2 py-4 text-muted-foreground">
                     <Loader2 className="size-4 animate-spin text-primary" />
-                    <span>Executing testcase in isolated runtime...</span>
+                    <span>Executing test case...</span>
                   </div>
                 ) : runResult ? (
                   <div className="space-y-3">
@@ -455,12 +494,6 @@ export function CodeEditorPane({
                             <span>Wrong Answer</span>
                           </div>
                         )}
-                        <span className="text-[11px] text-muted-foreground">
-                          Runtime:{" "}
-                          <strong className="text-foreground">
-                            {runResult.durationMs} ms
-                          </strong>
-                        </span>
                       </div>
                       <span className="font-mono text-[11px] text-muted-foreground">
                         Case: {runResult.caseName}
@@ -470,10 +503,10 @@ export function CodeEditorPane({
                     <div className="grid grid-cols-1 gap-2 font-mono sm:grid-cols-2">
                       <div className="space-y-1">
                         <span className="font-sans text-[11px] font-semibold text-muted-foreground">
-                          Your Output:
+                          Output:
                         </span>
                         <pre className="overflow-x-auto rounded border border-border bg-muted/40 p-2 text-foreground">
-                          {runResult.output}
+                          {runResult.output ?? "--"}
                         </pre>
                       </div>
                       <div className="space-y-1">
@@ -481,15 +514,14 @@ export function CodeEditorPane({
                           Expected:
                         </span>
                         <pre className="overflow-x-auto rounded border border-border bg-muted/40 p-2 text-emerald-600 dark:text-emerald-400">
-                          {runResult.expected}
+                          {runResult.expected ?? "--"}
                         </pre>
                       </div>
                     </div>
                   </div>
                 ) : (
                   <div className="py-4 text-center text-muted-foreground">
-                    Click "Run" to test your code against the selected test
-                    case.
+                    Click "Run" to test your solution.
                   </div>
                 )}
               </div>
@@ -502,11 +534,10 @@ export function CodeEditorPane({
                   <div className="flex flex-col items-center justify-center gap-2 py-6 text-center">
                     <Loader2 className="size-6 animate-spin text-emerald-500" />
                     <span className="text-sm font-semibold text-foreground">
-                      Gradcamp MicroVM Evaluation in Progress
+                      Submitting to Backend Worker
                     </span>
                     <span className="text-xs text-muted-foreground">
-                      {submissionStateDetail ||
-                        "Compiling and benchmarking inside sandbox container..."}
+                      {submissionStateDetail || "Uploading to /upload..."}
                     </span>
                   </div>
                 ) : activeSubmission ? (
@@ -522,7 +553,7 @@ export function CodeEditorPane({
                         </span>
                       </div>
                       <span className="font-mono text-xs text-muted-foreground">
-                        Job: {activeSubmission.id.substring(0, 12)}...
+                        Job ID: {activeSubmission.id}
                       </span>
                     </div>
 
@@ -532,69 +563,40 @@ export function CodeEditorPane({
                       </div>
                     ) : (
                       <>
-                        <div className="grid grid-cols-2 gap-3">
-                          <div className="rounded border border-border/70 bg-muted/40 p-2.5">
-                            <span className="block text-[11px] text-muted-foreground">
-                              Runtime
-                            </span>
-                            <span className="text-base font-bold text-foreground">
-                              {activeSubmission.runtimeMs} ms
-                            </span>
-                            {activeSubmission.runtimePercentile && (
-                              <span className="block text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
-                                Beats {activeSubmission.runtimePercentile}% of
-                                submissions
+                        {activeSubmission.testResults &&
+                          activeSubmission.testResults.length > 0 && (
+                            <div className="space-y-1.5 pt-1">
+                              <span className="block text-xs font-semibold text-foreground">
+                                Worker Test Matrix (
+                                {activeSubmission.testsPassed}/
+                                {activeSubmission.totalTests} passed)
                               </span>
-                            )}
-                          </div>
-                          <div className="rounded border border-border/70 bg-muted/40 p-2.5">
-                            <span className="block text-[11px] text-muted-foreground">
-                              Memory
-                            </span>
-                            <span className="text-base font-bold text-foreground">
-                              {activeSubmission.memoryMb} MB
-                            </span>
-                            {activeSubmission.memoryPercentile && (
-                              <span className="block text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
-                                Beats {activeSubmission.memoryPercentile}% of
-                                submissions
-                              </span>
-                            )}
-                          </div>
-                        </div>
-
-                        {activeSubmission.testResults && (
-                          <div className="space-y-1.5 pt-1">
-                            <span className="block text-xs font-semibold text-foreground">
-                              Test Suite Matrix ({activeSubmission.testsPassed}/
-                              {activeSubmission.totalTests} passed)
-                            </span>
-                            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                              {activeSubmission.testResults.map((t, idx) => (
-                                <div
-                                  key={idx}
-                                  className="flex items-center gap-2 rounded border border-border/60 bg-muted/30 p-2 text-xs"
-                                >
-                                  {t.passed ? (
-                                    <CheckCircle2 className="size-3.5 shrink-0 text-emerald-500" />
-                                  ) : (
-                                    <XCircle className="size-3.5 shrink-0 text-rose-500" />
-                                  )}
-                                  <span className="truncate font-medium">
-                                    {t.name}
-                                  </span>
-                                </div>
-                              ))}
+                              <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                                {activeSubmission.testResults.map((t, idx) => (
+                                  <div
+                                    key={idx}
+                                    className="flex items-center gap-2 rounded border border-border/60 bg-muted/30 p-2 text-xs"
+                                  >
+                                    {t.passed ? (
+                                      <CheckCircle2 className="size-3.5 shrink-0 text-emerald-500" />
+                                    ) : (
+                                      <XCircle className="size-3.5 shrink-0 text-rose-500" />
+                                    )}
+                                    <span className="truncate font-medium">
+                                      {t.name}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
                             </div>
-                          </div>
-                        )}
+                          )}
                       </>
                     )}
                   </div>
                 ) : (
                   <div className="py-4 text-center text-muted-foreground">
-                    Click "Submit" to grade your complete solution against all
-                    test cases.
+                    Click "Submit" to send your solution to the backend
+                    autograder worker.
                   </div>
                 )}
               </div>

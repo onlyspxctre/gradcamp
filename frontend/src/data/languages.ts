@@ -1,3 +1,4 @@
+/** @deprecated Currently unused: editor is locked to C for assignment submissions */
 import type { SupportedLanguage } from "@/types"
 
 export const SUPPORTED_LANGUAGES: SupportedLanguage[] = [

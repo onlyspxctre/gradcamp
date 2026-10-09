@@ -1,3 +1,4 @@
+/** @deprecated Currently unused / placeholder for community discussions */
 import {
   MessageSquare,
   Search,

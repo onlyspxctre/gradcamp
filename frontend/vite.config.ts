@@ -11,4 +11,16 @@ export default defineConfig({
       "@": resolve(import.meta.dirname, "./src"),
     },
   },
+  server: {
+    proxy: {
+      "/upload": {
+        target: "http://localhost:3000",
+        changeOrigin: true,
+      },
+      "/fetch": {
+        target: "http://localhost:3000",
+        changeOrigin: true,
+      },
+    },
+  },
 })

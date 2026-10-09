@@ -1,3 +1,4 @@
+/** @deprecated Currently unused / placeholder for contest features */
 import { Trophy, Users, Clock } from "lucide-react"
 import { Button } from "@/components/ui/button"
 

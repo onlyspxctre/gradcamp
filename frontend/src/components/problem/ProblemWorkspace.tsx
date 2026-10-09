@@ -1,15 +1,8 @@
-import React, { useState, useEffect, useRef, useCallback } from "react"
-import type {
-  Problem,
-  SupportedLanguage,
-  Submission,
-  ProblemLeftTab,
-  ConsoleTab,
-} from "@/types"
-import { SUPPORTED_LANGUAGES } from "@/data/languages"
+import { useState, useEffect, useRef, useCallback } from "react"
+import type { Problem, Submission, ProblemLeftTab, ConsoleTab } from "@/types"
 import { ProblemLeftPane } from "./ProblemLeftPane"
 import { CodeEditorPane } from "./CodeEditorPane"
-import { submitToJudge, runLocalTestCase } from "@/services/judgeService"
+import { submitToBackendQueue } from "@/services/judgeService"
 import { GripVertical } from "lucide-react"
 
 interface ProblemWorkspaceProps {
@@ -31,18 +24,7 @@ export function ProblemWorkspace({
   isSubmitting,
   setIsSubmitting,
 }: ProblemWorkspaceProps) {
-  // Languages & Code state
-  const [selectedLanguage, setSelectedLanguage] = useState<SupportedLanguage>(
-    SUPPORTED_LANGUAGES[0] // C as default
-  )
-
-  // Store code per language for this problem
-  const [codeMap, setCodeMap] = useState<Record<string, string>>({})
-
-  const currentCode =
-    codeMap[selectedLanguage.id] ??
-    problem.starterCodes[selectedLanguage.id] ??
-    "// Write your solution here\n"
+  const [code, setCode] = useState<string>(problem.starterCode)
 
   // Left tab and console state
   const [leftTab, setLeftTab] = useState<ProblemLeftTab>("description")
@@ -55,9 +37,8 @@ export function ProblemWorkspace({
 
   const [runResult, setRunResult] = useState<{
     passed: boolean
-    output: string
-    expected: string
-    durationMs: number
+    output?: string
+    expected?: string
     caseName: string
   } | null>(null)
 
@@ -66,22 +47,12 @@ export function ProblemWorkspace({
   const isDraggingRef = useRef<boolean>(false)
   const containerRef = useRef<HTMLDivElement>(null)
 
-  // Update current code
-  const handleCodeChange = (newCode: string) => {
-    setCodeMap((prev) => ({
-      ...prev,
-      [selectedLanguage.id]: newCode,
-    }))
-  }
-
   // Reset code to starter template
   const handleResetCode = () => {
-    const starter =
-      problem.starterCodes[selectedLanguage.id] || "// Start typing...\n"
-    handleCodeChange(starter)
+    setCode(problem.starterCode)
   }
 
-  // Run Code logic
+  // Run Code logic (submits to worker and shows in test result tab)
   const handleRunCode = useCallback(async () => {
     if (isRunning || isSubmitting) return
 
@@ -90,26 +61,30 @@ export function ProblemWorkspace({
     setConsoleTab("testresult")
 
     try {
-      const activeCase = problem.testCases[0]
-      const res = await runLocalTestCase(
-        currentCode,
-        activeCase.input,
-        activeCase.expectedOutput
-      )
-
-      setRunResult({
-        passed: res.passed,
-        output: res.output,
-        expected: activeCase.expectedOutput,
-        durationMs: res.durationMs,
-        caseName: activeCase.name,
+      const result = await submitToBackendQueue({
+        problemId: problem.id,
+        problemTitle: problem.title,
+        code,
+        onStatusChange: (_status, detail) => {
+          if (detail) setSubmissionStateDetail(detail)
+        },
       })
+
+      const firstTest = result.testResults?.[0]
+      setRunResult({
+        passed: firstTest ? firstTest.passed : result.status === "Accepted",
+        output: firstTest?.output,
+        expected: firstTest?.expected ?? problem.testCases[0].expectedOutput,
+        caseName: problem.testCases[0].name,
+      })
+      setActiveSubmission(result)
+      onNewSubmission(result)
     } finally {
       setIsRunning(false)
     }
-  }, [isRunning, isSubmitting, problem, currentCode, setIsRunning])
+  }, [isRunning, isSubmitting, problem, code, onNewSubmission, setIsRunning])
 
-  // Submit Code logic
+  // Submit Code logic (submits to backend worker queue and shows in submission result tab)
   const handleSubmitCode = useCallback(async () => {
     if (isRunning || isSubmitting) return
 
@@ -117,14 +92,13 @@ export function ProblemWorkspace({
     setIsConsoleOpen(true)
     setConsoleTab("submission")
     setActiveSubmission(null)
-    setSubmissionStateDetail("Submitting to Gradcamp worker queue...")
+    setSubmissionStateDetail("Connecting to backend /upload...")
 
     try {
-      const result = await submitToJudge({
+      const result = await submitToBackendQueue({
         problemId: problem.id,
         problemTitle: problem.title,
-        code: currentCode,
-        language: selectedLanguage.name,
+        code,
         onStatusChange: (_status, detail) => {
           if (detail) setSubmissionStateDetail(detail)
         },
@@ -132,19 +106,10 @@ export function ProblemWorkspace({
 
       setActiveSubmission(result)
       onNewSubmission(result)
-      // Switch left tab to submissions so user sees update there too if desired
     } finally {
       setIsSubmitting(false)
     }
-  }, [
-    isRunning,
-    isSubmitting,
-    problem,
-    currentCode,
-    selectedLanguage.name,
-    onNewSubmission,
-    setIsSubmitting,
-  ])
+  }, [isRunning, isSubmitting, problem, code, onNewSubmission, setIsSubmitting])
 
   // Draggable Divider Mouse Handlers
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -201,7 +166,7 @@ export function ProblemWorkspace({
       ref={containerRef}
       className="flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden bg-background md:flex-row"
     >
-      {/* Left Pane (Description, Editorial, Submissions, Solutions) */}
+      {/* Left Pane (Description, Submissions) */}
       <div
         style={{ width: `${splitPercent}%` }}
         className="hidden h-full min-h-0 min-w-0 shrink-0 flex-col overflow-hidden md:flex"
@@ -228,7 +193,7 @@ export function ProblemWorkspace({
         <GripVertical className="size-3 text-muted-foreground/60 transition-colors group-hover:text-primary" />
       </div>
 
-      {/* Mobile Stack: Show Left pane when needed or collapsed */}
+      {/* Mobile Stack: Show Left pane */}
       <div className="flex h-1/2 min-h-0 flex-1 flex-col overflow-hidden border-b border-border md:hidden">
         <ProblemLeftPane
           problem={problem}
@@ -243,17 +208,15 @@ export function ProblemWorkspace({
         />
       </div>
 
-      {/* Right Pane (Code Editor & Test Console) */}
+      {/* Right Pane (Code Editor & Vertically Resizable Test Console) */}
       <div
         style={{ width: `calc(${100 - splitPercent}% - 0.625rem)` }}
         className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
       >
         <CodeEditorPane
           problem={problem}
-          code={currentCode}
-          setCode={handleCodeChange}
-          selectedLanguage={selectedLanguage}
-          setSelectedLanguage={setSelectedLanguage}
+          code={code}
+          setCode={setCode}
           onRunCode={handleRunCode}
           onSubmitCode={handleSubmitCode}
           onResetCode={handleResetCode}

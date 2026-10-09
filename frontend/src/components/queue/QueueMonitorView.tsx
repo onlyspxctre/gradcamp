@@ -1,3 +1,4 @@
+/** @deprecated Currently unused / placeholder for worker queue dashboard */
 import {
   Server,
   Activity,

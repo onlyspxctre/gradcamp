@@ -24,32 +24,6 @@ export interface ProblemExample {
   explanation?: string
 }
 
-export interface Problem {
-  id: string
-  numericId: number
-  title: string
-  slug: string
-  difficulty: Difficulty
-  category: string
-  tags: string[]
-  acceptance: string
-  totalSubmissions: string
-  description: string
-  examples: ProblemExample[]
-  constraints: string[]
-  hints: string[]
-  starterCodes: Record<string, string>
-  testCases: TestCase[]
-  solutionExplanation?: {
-    approach: string
-    complexity: {
-      time: string
-      space: string
-    }
-    codeSnippet: string
-  }
-}
-
 export interface SupportedLanguage {
   id: string
   name: string
@@ -58,14 +32,26 @@ export interface SupportedLanguage {
   version: string
 }
 
+export interface Problem {
+  id: string
+  numericId: number
+  title: string
+  slug: string
+  difficulty: Difficulty
+  category: string
+  description: string
+  examples: ProblemExample[]
+  constraints: string[]
+  starterCode: string
+  testCases: TestCase[]
+}
+
 export interface TestResultItem {
   name: string
   passed: boolean
-  input?: string
   output?: string
   expected?: string
   durationMs?: number
-  error?: string
 }
 
 export interface Submission {
@@ -77,19 +63,16 @@ export interface Submission {
   status: SubmissionStatus
   timestamp: string
   runtimeMs?: number
-  runtimePercentile?: number
   memoryMb?: number
-  memoryPercentile?: number
   testsPassed: number
   totalTests: number
   testResults?: TestResultItem[]
   compileError?: string
+  statusDetail?: string
 }
 
-export type ActiveNavTab =
-  "problems" | "solve" | "contest" | "discuss" | "submissions" | "queue"
+export type ActiveNavTab = "workspace" | "assignments" | "submissions"
 
-export type ProblemLeftTab =
-  "description" | "editorial" | "submissions" | "discuss"
+export type ProblemLeftTab = "description" | "submissions"
 
 export type ConsoleTab = "testcase" | "testresult" | "submission"
