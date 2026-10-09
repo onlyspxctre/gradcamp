@@ -13,6 +13,8 @@
 #include <unistd.h>
 #include <yyjson.h>
 
+#include "common/hiredis_client.h"
+
 static int valid_job_id(const char *id) {
     if (!id) return 0;
     size_t len = strlen(id);
@@ -107,38 +109,21 @@ static void compiler(const char *id) {
 }
 
 static void job(const char *id) {
-    redisContext *redis_ctx = redisConnect("127.0.0.1", 6379);
-    if (!redis_ctx || redis_ctx->err) {
-        fprintf(stderr, "Valkey connection failed for job %s\n", id);
-        return;
-    }
-
-    redisReply *reply = redisCommand(redis_ctx, "AUTH foobarbaz");
-    if (!reply || reply->type == REDIS_REPLY_ERROR) {
-        fprintf(stderr, "Valkey authentication failed for job %s\n", id);
-        if (reply) freeReplyObject(reply);
-        redisFree(redis_ctx);
-        return;
-    }
-    freeReplyObject(reply);
-
     // 1. Ensure scratch directories exist
     if (ensure_job_dirs(id) != 0) {
         fprintf(stderr, "Failed to create directory structure for job %s\n", id);
-        reply = redisCommand(redis_ctx, "HSET job:%s status failed error %s", id, "Failed to create job directories on worker");
+        redisReply *reply = gradcamp_redis_run_cmd("HSET job:%s status failed error %s", id, "Failed to create job directories on worker");
         if (reply) freeReplyObject(reply);
-        redisFree(redis_ctx);
         return;
     }
 
     // 2. Fetch submitted source from Redis
-    reply = redisCommand(redis_ctx, "HGET job:%s source", id);
+    redisReply *reply = gradcamp_redis_run_cmd("HGET job:%s source", id);
     if (!reply || reply->type != REDIS_REPLY_STRING) {
         fprintf(stderr, "Failed to fetch source for job %s from datastore\n", id);
         if (reply) freeReplyObject(reply);
-        reply = redisCommand(redis_ctx, "HSET job:%s status failed error %s", id, "Source code not found in datastore");
+        reply = gradcamp_redis_run_cmd("HSET job:%s status failed error %s", id, "Source code not found in datastore");
         if (reply) freeReplyObject(reply);
-        redisFree(redis_ctx);
         return;
     }
 
@@ -148,9 +133,8 @@ static void job(const char *id) {
     if (!fp) {
         perror("Failed to create source file");
         freeReplyObject(reply);
-        reply = redisCommand(redis_ctx, "HSET job:%s status failed error %s", id, "Failed to create source file on worker");
+        reply = gradcamp_redis_run_cmd("HSET job:%s status failed error %s", id, "Failed to create source file on worker");
         if (reply) freeReplyObject(reply);
-        redisFree(redis_ctx);
         return;
     }
 
@@ -158,9 +142,8 @@ static void job(const char *id) {
         perror("Failed to write source file");
         fclose(fp);
         freeReplyObject(reply);
-        reply = redisCommand(redis_ctx, "HSET job:%s status failed error %s", id, "Failed to write source file on worker");
+        reply = gradcamp_redis_run_cmd("HSET job:%s status failed error %s", id, "Failed to write source file on worker");
         if (reply) freeReplyObject(reply);
-        redisFree(redis_ctx);
         return;
     }
     fclose(fp);
@@ -170,9 +153,8 @@ static void job(const char *id) {
     pid_t pid = fork();
     if (pid < 0) {
         fprintf(stderr, "Compiler fork failed for job %s\n", id);
-        reply = redisCommand(redis_ctx, "HSET job:%s status failed error %s", id, "Compiler process fork failed");
+        reply = gradcamp_redis_run_cmd("HSET job:%s status failed error %s", id, "Compiler process fork failed");
         if (reply) freeReplyObject(reply);
-        redisFree(redis_ctx);
         return;
     } else if (pid == 0) {
         compiler(id);
@@ -182,9 +164,8 @@ static void job(const char *id) {
     waitpid(pid, &status, 0);
     if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
         fprintf(stderr, "Compilation failed for job %s (exit code %d)\n", id, WEXITSTATUS(status));
-        reply = redisCommand(redis_ctx, "HSET job:%s status failed error %s", id, "Compilation failed");
+        reply = gradcamp_redis_run_cmd("HSET job:%s status failed error %s", id, "Compilation failed");
         if (reply) freeReplyObject(reply);
-        redisFree(redis_ctx);
         return;
     }
 
@@ -192,9 +173,8 @@ static void job(const char *id) {
     pid = fork();
     if (pid < 0) {
         fprintf(stderr, "Runner fork failed for job %s\n", id);
-        reply = redisCommand(redis_ctx, "HSET job:%s status failed error %s", id, "Runner process fork failed");
+        reply = gradcamp_redis_run_cmd("HSET job:%s status failed error %s", id, "Runner process fork failed");
         if (reply) freeReplyObject(reply);
-        redisFree(redis_ctx);
         return;
     } else if (pid == 0) {
         runner(id);
@@ -208,9 +188,8 @@ static void job(const char *id) {
     FILE *rf = fopen(out_file, "rb");
     if (!rf) {
         fprintf(stderr, "Failed to open results file for job %s\n", id);
-        reply = redisCommand(redis_ctx, "HSET job:%s status failed error %s", id, "Results file not generated");
+        reply = gradcamp_redis_run_cmd("HSET job:%s status failed error %s", id, "Results file not generated");
         if (reply) freeReplyObject(reply);
-        redisFree(redis_ctx);
         return;
     }
 
@@ -220,18 +199,16 @@ static void job(const char *id) {
 
     if (rlen <= 0) {
         fclose(rf);
-        reply = redisCommand(redis_ctx, "HSET job:%s status failed error %s", id, "Results file was empty");
+        reply = gradcamp_redis_run_cmd("HSET job:%s status failed error %s", id, "Results file was empty");
         if (reply) freeReplyObject(reply);
-        redisFree(redis_ctx);
         return;
     }
 
     char *results_buf = malloc((size_t)rlen + 1);
     if (!results_buf) {
         fclose(rf);
-        reply = redisCommand(redis_ctx, "HSET job:%s status failed error %s", id, "Memory allocation error");
+        reply = gradcamp_redis_run_cmd("HSET job:%s status failed error %s", id, "Memory allocation error");
         if (reply) freeReplyObject(reply);
-        redisFree(redis_ctx);
         return;
     }
 
@@ -240,33 +217,22 @@ static void job(const char *id) {
     results_buf[bytes_read] = '\0';
 
     // 6. Save results and update status
-    reply = redisCommand(redis_ctx, "HSET job:%s status completed results %b", id, results_buf, bytes_read);
+    reply = gradcamp_redis_run_cmd("HSET job:%s status completed results %b", id, results_buf, bytes_read);
     if (reply) freeReplyObject(reply);
     free(results_buf);
-
-    redisFree(redis_ctx);
 }
 
 int main(void) {
     signal(SIGCHLD, SIG_IGN);
 
-    redisContext *redis_ctx = redisConnect("127.0.0.1", 6379);
-    if (!redis_ctx || redis_ctx->err) {
-        fprintf(stderr, "Valkey error: %s\n", redis_ctx ? redis_ctx->errstr : "connection failure");
-        exit(1);
+    if (gradcamp_redis_init() != 0) {
+        return 1;
     }
 
-    redisReply *reply = redisCommand(redis_ctx, "AUTH foobarbaz");
-    if (!reply || reply->type == REDIS_REPLY_ERROR) {
-        fprintf(stderr, "Valkey error: %s\n", redis_ctx ? redis_ctx->errstr : "authentication failure");
-        exit(1);
-    }
-    freeReplyObject(reply);
-
-    printf("Worker queue listening to Valkey at 127.0.0.1:6379\n");
+    printf("Worker listening to jobs_pending queue...\n");
 
     while (1) {
-        redisReply *res = redisCommand(redis_ctx, "LPOP jobs_pending");
+        redisReply *res = gradcamp_redis_run_cmd("LPOP jobs_pending");
         if (!res) {
             usleep(50000);
             continue;
@@ -298,7 +264,7 @@ int main(void) {
 
         printf("Dequeued job: %s\n", job_id);
 
-        redisReply *update_reply = redisCommand(redis_ctx, "HSET job:%s status inprogress", job_id);
+        redisReply *update_reply = gradcamp_redis_run_cmd("HSET job:%s status inprogress", job_id);
         if (update_reply) freeReplyObject(update_reply);
 
         pid_t pid = fork();
@@ -306,12 +272,15 @@ int main(void) {
             fprintf(stderr, "Job fork failed for %s\n", job_id);
             continue;
         } else if (pid == 0) {
-            redisFree(redis_ctx);
-            job(job_id);
+            gradcamp_redis_free();
+            if (gradcamp_redis_init() == 0) {
+                job(job_id);
+                gradcamp_redis_free();
+            }
             exit(0);
         }
     }
 
-    redisFree(redis_ctx);
+    gradcamp_redis_free();
     return 0;
 }

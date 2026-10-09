@@ -29,7 +29,7 @@ int gradcamp_redis_init() {
     }
     freeReplyObject(reply);
 
-    printf("Gradcamp::Backend listening to Valkey at 127.0.0.1:6379\n");
+    printf("Gradcamp connected to Valkey at 127.0.0.1:6379\n");
     return 0;
 }
 
