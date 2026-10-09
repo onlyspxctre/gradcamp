@@ -26,10 +26,13 @@ RUN rm -rf /sbin/apk /etc/apk /lib/apk /var/cache/apk/*
 RUN adduser -D -u 1000 -s /bin/sh grader && \
     mkdir -p /workspace/src /workspace/bin && \
     chown -R grader:grader /workspace
-# TODO: add some compile helper script
+COPY test_add.c /usr/local/src/test_add.c
+COPY compile.sh /usr/local/bin/compile.sh
+RUN chmod 0755 /usr/local/bin/compile.sh
 
 USER grader
 WORKDIR /workspace
 
 ENV TMPDIR=/tmp
-ENTRYPOINT gcc -static -o /workspace/bin/main /workspace/src/main.c
+ENTRYPOINT ["/usr/local/bin/compile.sh"]
+
