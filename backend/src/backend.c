@@ -8,10 +8,37 @@
 #include <fio-stl.h>
 #include <hiredis.h>
 #include <yyjson.h>
+#include <ctype.h>
+#include <errno.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 
 #include "common/hiredis_client.h"
 
 #define fio_string_from_cstr(lit) .buf = "" lit "", .len = sizeof(lit) - 1
+
+static int valid_job_id(const char *id, size_t len) {
+    if (!id || !len || len > 128) return 0;
+    for (size_t i = 0; i < len; ++i) {
+        if (!(isalnum((unsigned char)id[i]) || id[i] == '-' || id[i] == '_')) return 0;
+    }
+    return 1;
+}
+
+static int ensure_job_dirs(const char *id) {
+    char path[160];
+    int n = snprintf(path, sizeof(path), "./job/%s", id);
+    if (n < 0 || (size_t)n >= sizeof(path)) return -1;
+    if (mkdir("./job", 0755) != 0 && errno != EEXIST) return -1;
+    if (mkdir(path, 0755) != 0 && errno != EEXIST) return -1;
+    n = snprintf(path, sizeof(path), "./job/%s/src", id);
+    if (n < 0 || (size_t)n >= sizeof(path) || (mkdir(path, 0755) != 0 && errno != EEXIST)) return -1;
+    n = snprintf(path, sizeof(path), "./job/%s/bin", id);
+    if (n < 0 || (size_t)n >= sizeof(path) || (mkdir(path, 0755) != 0 && errno != EEXIST)) return -1;
+    n = snprintf(path, sizeof(path), "./job/%s/out", id);
+    if (n < 0 || (size_t)n >= sizeof(path) || (mkdir(path, 0755) != 0 && errno != EEXIST)) return -1;
+    return 0;
+}
 
 void on_request(fio_http_s *h) {
     fio_http_status_set(h, 200);
@@ -45,6 +72,12 @@ void on_fetch(fio_http_s *h) {
     if (!res_buf.len) {
         fio_http_status_set(h, 400);
         fio_http_write(h, fio_string_from_cstr("No job specified!"), .finish = 1);
+        return;
+    }
+
+    if (!valid_job_id(res_buf.buf, res_buf.len)) {
+        fio_http_status_set(h, 400);
+        fio_http_write(h, fio_string_from_cstr("Invalid job ID!"), .finish = 1);
         return;
     }
 
@@ -94,7 +127,9 @@ void on_fetch(fio_http_s *h) {
             return;
         }
 
-        yyjson_doc *results_json = yyjson_read_file("./job/out/results.json", 0, NULL, NULL); // TODO: hardcoded job dir
+        char results_path[160];
+        snprintf(results_path, sizeof(results_path), "./job/%.*s/out/results.json", (int)res_buf.len, res_buf.buf);
+        yyjson_doc *results_json = yyjson_read_file(results_path, 0, NULL, NULL);
         yyjson_val *results_json_root = results_json ? yyjson_doc_get_root(results_json) : NULL;
 
         if (!results_json || !results_json_root) {
@@ -187,8 +222,24 @@ void on_upload(fio_http_s *h) {
         return;
     }
 
+    if (!valid_job_id(job_buf.buf, job_buf.len)) {
+        fio_http_status_set(h, 400);
+        fio_http_write(h, fio_string_from_cstr("Invalid job ID!"), .finish = 1);
+        return;
+    }
+
     // TODO: magic byte checking
-    FILE *fp = fopen("./job/src/main.c", "wb");
+    char job_id[129];
+    memcpy(job_id, job_buf.buf, job_buf.len);
+    job_id[job_buf.len] = '\0';
+    if (ensure_job_dirs(job_id) != 0) {
+        fio_http_status_set(h, 500);
+        fio_http_write(h, fio_string_from_cstr("Failed to create job directory\n"), .finish = 1);
+        return;
+    }
+    char source_path[160];
+    snprintf(source_path, sizeof(source_path), "./job/%.*s/src/main.c", (int)job_buf.len, job_buf.buf);
+    FILE *fp = fopen(source_path, "wb");
     if (!fp) {
         fio_http_status_set(h, 500);
         fio_http_write(h, fio_string_from_cstr("Failed to write\n"), .finish = 1);
