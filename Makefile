@@ -1,12 +1,18 @@
-SUBDIRS := common backend
-.PHONY: all clean $(SUBDIRS)
+SERVICES := backend worker
+.PHONY: all clean common $(SERVICES)
 
 export CFLAGS := -std=c23 -Wall -Wextra
 
 export BUILDDIR := $(CURDIR)/build
 export OBJDIR := $(CURDIR)/obj
 
-all: $(SUBDIRS)
+all: common $(SERVICES)
 
-$(SUBDIRS): common
+common:
 	$(MAKE) -C $@
+
+$(SERVICES): common
+	$(MAKE) -C $@
+
+clean:
+	rm -rf $(BUILDDIR) $(OBJDIR)

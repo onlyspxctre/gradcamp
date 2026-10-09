@@ -1,5 +1,7 @@
 .PHONY: all clean
 
+BUILDDIR ?= $(abspath ../build)
+OBJDIR ?= $(abspath ../obj)
 SRCDIR := $(CURDIR)/src
 INCLUDEDIR := $(CURDIR)/include
 
@@ -14,3 +16,6 @@ all: $(BUILDDIR)/backend
 $(BUILDDIR)/backend: $(SRCDIR)/backend.c $(INCLUDEDIR)/fio-stl.h
 	mkdir -p $(BUILDDIR)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $< $(LDLIBS)
+
+clean:
+	rm -f $(BUILDDIR)/backend

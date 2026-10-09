@@ -14,3 +14,6 @@ all: $(OBJDIR)/hiredis_client.o
 $(OBJDIR)/hiredis_client.o: $(CURDIR)/hiredis_client.c
 	mkdir -p $(OBJDIR)
 	$(CC) $(CFLAGS) -c -o $@ $<
+
+clean:
+	rm -f $(OBJDIR)/hiredis_client.o

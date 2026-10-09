@@ -9,9 +9,6 @@
 #include <hiredis.h>
 #include <yyjson.h>
 #include <ctype.h>
-#include <errno.h>
-#include <sys/stat.h>
-#include <sys/types.h>
 
 #include "common/hiredis_client.h"
 
@@ -23,21 +20,6 @@ static int valid_job_id(const char *id, size_t len) {
         if (!(isalnum((unsigned char)id[i]) || id[i] == '-' || id[i] == '_')) return 0;
     }
     return 1;
-}
-
-static int ensure_job_dirs(const char *id) {
-    char path[160];
-    int n = snprintf(path, sizeof(path), "./job/%s", id);
-    if (n < 0 || (size_t)n >= sizeof(path)) return -1;
-    if (mkdir("./job", 0755) != 0 && errno != EEXIST) return -1;
-    if (mkdir(path, 0755) != 0 && errno != EEXIST) return -1;
-    n = snprintf(path, sizeof(path), "./job/%s/src", id);
-    if (n < 0 || (size_t)n >= sizeof(path) || (mkdir(path, 0755) != 0 && errno != EEXIST)) return -1;
-    n = snprintf(path, sizeof(path), "./job/%s/bin", id);
-    if (n < 0 || (size_t)n >= sizeof(path) || (mkdir(path, 0755) != 0 && errno != EEXIST)) return -1;
-    n = snprintf(path, sizeof(path), "./job/%s/out", id);
-    if (n < 0 || (size_t)n >= sizeof(path) || (mkdir(path, 0755) != 0 && errno != EEXIST)) return -1;
-    return 0;
 }
 
 void on_request(fio_http_s *h) {
@@ -127,18 +109,26 @@ void on_fetch(fio_http_s *h) {
             return;
         }
 
-        char results_path[160];
-        snprintf(results_path, sizeof(results_path), "./job/%.*s/out/results.json", (int)res_buf.len, res_buf.buf);
-        yyjson_doc *results_json = yyjson_read_file(results_path, 0, NULL, NULL);
+        redisReply *results_res = gradcamp_redis_run_cmd("HGET job:%b results", res_buf.buf, res_buf.len);
+        if (!results_res || results_res->type != REDIS_REPLY_STRING) {
+            if (results_res) freeReplyObject(results_res);
+            yyjson_mut_doc_free(json);
+            freeReplyObject(res);
+            fprintf(stderr, "Failure to fetch results from datastore\n");
+            fio_http_status_set(h, 500);
+            fio_http_write(h, fio_string_from_cstr("Internal Server Error"), .finish = 1);
+            return;
+        }
+
+        yyjson_doc *results_json = yyjson_read(results_res->str, results_res->len, 0);
         yyjson_val *results_json_root = results_json ? yyjson_doc_get_root(results_json) : NULL;
 
         if (!results_json || !results_json_root) {
+            if (results_json) yyjson_doc_free(results_json);
+            freeReplyObject(results_res);
             yyjson_mut_doc_free(json);
             freeReplyObject(res);
-            if (results_json) yyjson_doc_free(results_json);
-
-            fprintf(stderr, "Failure to read results JSON file\n");
-
+            fprintf(stderr, "Failure to parse results JSON\n");
             fio_http_status_set(h, 500);
             fio_http_write(h, fio_string_from_cstr("Internal Server Error"), .finish = 1);
             return;
@@ -150,6 +140,7 @@ void on_fetch(fio_http_s *h) {
         }
 
         yyjson_doc_free(results_json);
+        freeReplyObject(results_res);
     } else if (strcmp(res->str, "inprogress") == 0) {
         if (!yyjson_mut_obj_add_str(json, json_root, "status", "inprogress")) {
             yyjson_mut_doc_free(json);
@@ -166,6 +157,19 @@ void on_fetch(fio_http_s *h) {
             fio_http_write(h, fio_string_from_cstr("Internal Server Error"), .finish = 1);
             return;
         }
+    } else if (strcmp(res->str, "failed") == 0) {
+        if (!yyjson_mut_obj_add_str(json, json_root, "status", "failed")) {
+            yyjson_mut_doc_free(json);
+            freeReplyObject(res);
+            fio_http_status_set(h, 500);
+            fio_http_write(h, fio_string_from_cstr("Internal Server Error"), .finish = 1);
+            return;
+        }
+        redisReply *err_res = gradcamp_redis_run_cmd("HGET job:%b error", res_buf.buf, res_buf.len);
+        if (err_res && err_res->type == REDIS_REPLY_STRING) {
+            yyjson_mut_obj_add_str(json, json_root, "error", err_res->str);
+        }
+        if (err_res) freeReplyObject(err_res);
     } else {
         fio_http_status_set(h, 500);
         fio_http_write(h, fio_string_from_cstr("Job is in an unknown state!"), .finish = 1);
@@ -228,51 +232,32 @@ void on_upload(fio_http_s *h) {
         return;
     }
 
-    // TODO: magic byte checking
-    char job_id[129];
-    memcpy(job_id, job_buf.buf, job_buf.len);
-    job_id[job_buf.len] = '\0';
-    if (ensure_job_dirs(job_id) != 0) {
-        fio_http_status_set(h, 500);
-        fio_http_write(h, fio_string_from_cstr("Failed to create job directory\n"), .finish = 1);
-        return;
-    }
-    char source_path[160];
-    snprintf(source_path, sizeof(source_path), "./job/%.*s/src/main.c", (int)job_buf.len, job_buf.buf);
-    FILE *fp = fopen(source_path, "wb");
-    if (!fp) {
-        fio_http_status_set(h, 500);
-        fio_http_write(h, fio_string_from_cstr("Failed to write\n"), .finish = 1);
-        return;
-    }
-
     fio_http_body_seek(h, 0);
-    fio_str_info_s chunk = fio_http_body_read(h, (size_t) -1);
-    if (chunk.buf && chunk.len) {
-        if (fwrite(chunk.buf, 1, chunk.len, fp) != chunk.len) {
-            fclose(fp);
-            fio_http_status_set(h, 500);
-            fio_http_write(h, fio_string_from_cstr("Failed to write\n"), .finish = 1);
-            return;
-        }
-    }
-    if (fclose(fp) != 0) {
-        fio_http_status_set(h, 500);
-        fio_http_write(h, fio_string_from_cstr("Failed to write\n"), .finish = 1);
+    fio_str_info_s body = fio_http_body_read(h, (size_t) -1);
+    if (!body.buf || !body.len) {
+        fio_http_status_set(h, 400);
+        fio_http_write(h, fio_string_from_cstr("Empty Body\n"), .finish = 1);
         return;
     }
 
-
-    redisReply *reply = gradcamp_redis_run_cmd("HSET job:%b status pending", job_buf.buf, job_buf.len);
+    redisReply *reply = gradcamp_redis_run_cmd("HSET job:%b status pending source %b", job_buf.buf, job_buf.len, body.buf, body.len);
     if (!reply || reply->type == REDIS_REPLY_ERROR) {
         fio_http_status_set(h, 500);
         if (reply) freeReplyObject(reply);
-        fio_http_write(h, fio_string_from_cstr("Pushing job to worker queue failed!\n"), .finish = 1);
+        fio_http_write(h, fio_string_from_cstr("Failed to save job in datastore!\n"), .finish = 1);
         return;
     }
     freeReplyObject(reply);
 
-    reply = gradcamp_redis_run_cmd("LPUSH jobs_pending %s", "{ \"uuid\": \"%b\" }", job_buf.buf, job_buf.len);
+    char queue_payload[256];
+    int payload_len = snprintf(queue_payload, sizeof(queue_payload), "{\"uuid\":\"%.*s\"}", (int)job_buf.len, job_buf.buf);
+    if (payload_len < 0 || (size_t)payload_len >= sizeof(queue_payload)) {
+        fio_http_status_set(h, 500);
+        fio_http_write(h, fio_string_from_cstr("Failed to serialize queue payload!\n"), .finish = 1);
+        return;
+    }
+
+    reply = gradcamp_redis_run_cmd("LPUSH jobs_pending %b", queue_payload, (size_t)payload_len);
     if (!reply || reply->type == REDIS_REPLY_ERROR) {
         fio_http_status_set(h, 500);
         if (reply) freeReplyObject(reply);

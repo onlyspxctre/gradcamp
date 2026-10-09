@@ -1,5 +1,5 @@
 #!/bin/sh
 
-set +xe
+set -e
 
-gcc -o main main.c $(pkg-config --cflags --libs hiredis yyjson)
+exec make "$@"
