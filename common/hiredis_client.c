@@ -4,7 +4,7 @@
 
 #include "hiredis_client.h"
 
-static redisContext *g_redis_ctx = NULL;
+thread_local static redisContext *g_redis_ctx = NULL;
 
 int gradcamp_redis_init() {
     g_redis_ctx = redisConnect("127.0.0.1", 6379);

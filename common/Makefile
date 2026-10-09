@@ -5,7 +5,7 @@ OBJDIR ?= $(abspath ./obj)
 LIBS := hiredis
 
 CC := clang
-CFLAGS := -Wall -Wextra $(shell pkg-config --cflags $(LIBS))
+CFLAGS += $(shell pkg-config --cflags $(LIBS))
 LDFLAGS := -fuse-ld=mold
 LDLIBS := $(shell pkg-config --libs $(LIBS)) -lm
 

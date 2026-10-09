@@ -6,7 +6,7 @@ INCLUDEDIR := $(CURDIR)/include
 LIBS := hiredis yyjson
 
 CC := clang
-CFLAGS := $(CFLAGS) -isystem$(INCLUDEDIR) -I../ $(shell pkg-config --cflags $(LIBS))
+CFLAGS += -isystem$(INCLUDEDIR) -I../ $(shell pkg-config --cflags $(LIBS))
 LDLIBS := $(OBJDIR)/hiredis_client.o $(shell pkg-config --libs $(LIBS)) -lm
 
 all: $(BUILDDIR)/backend
