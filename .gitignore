@@ -1,5 +1,7 @@
 **/build/
 **/obj/
+**/deps/
+backend/include/
 
 job/
 compile_commands.json
