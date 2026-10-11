@@ -51,15 +51,16 @@ echo "[worker] Starting ./build/worker..."
 "$WORKER_BIN" &
 WORKER_PID=$!
 
-# 3. Frontend (commented out for now since already running externally)
-# echo "[frontend] Starting npm run dev..."
-# (cd "$ROOT_DIR/frontend" && npm run dev) &
-# FRONTEND_PID=$!
+# 3. Frontend
+echo "[frontend] Starting pnpm run dev..."
+(cd "$ROOT_DIR/frontend" && pnpm run dev) &
+FRONTEND_PID=$!
 
 echo "=========================================="
 echo " Backend running at PID: $BACKEND_PID"
 echo " Worker running at PID:  $WORKER_PID"
-echo " Press Ctrl+C to stop both services"
+echo " Frontend running at PID:  $FRONTEND_PID"
+echo " Press Ctrl+C to stop services"
 echo "=========================================="
 
 # Wait for background jobs to finish or until user interrupts
