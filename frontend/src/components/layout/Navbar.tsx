@@ -1,7 +1,24 @@
-import { Code2, Play, Send, Sun, Moon, User } from "lucide-react"
+import {
+    Code2,
+    Play,
+    Send,
+    Sun,
+    Moon,
+    User,
+    BookOpen,
+    History,
+} from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useTheme } from "@/components/theme-provider"
 import { useWorkspace } from "@/context/WorkspaceContext"
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuLabel,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import type { ActiveNavTab } from "@/types"
 
 interface NavbarProps {
@@ -112,11 +129,64 @@ export function Navbar({ activeTab, setActiveTab }: NavbarProps) {
                         )}
                     </Button>
 
-                    {/* User profile avatar */}
-                    <div className="flex items-center border-l border-border/80 pl-1">
-                        <button className="flex size-7 items-center justify-center rounded-full bg-gradient-to-tr from-primary/80 to-primary text-xs font-medium text-primary-foreground shadow-xs ring-1 ring-border transition-all hover:ring-2">
-                            <User className="size-3.5" />
-                        </button>
+                    {/* User profile dropdown */}
+                    <div className="flex items-center border-border/80 pl-1">
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <button
+                                    className="flex size-7 cursor-pointer items-center justify-center rounded-full bg-gradient-to-tr from-primary/80 to-primary text-xs font-medium text-primary-foreground shadow-xs ring-1 ring-border transition-all hover:ring-2 focus:outline-none"
+                                    title="User Menu"
+                                >
+                                    <User className="size-3.5" />
+                                </button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent
+                                align="end"
+                                className="w-48 text-xs"
+                            >
+                                <DropdownMenuLabel className="font-semibold text-foreground">
+                                    Gradcamp Account
+                                </DropdownMenuLabel>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                    onClick={() => setActiveTab("workspace")}
+                                >
+                                    <Code2 className="mr-2 size-3.5" />
+                                    <span>Workspace</span>
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                    onClick={() => setActiveTab("assignments")}
+                                >
+                                    <BookOpen className="mr-2 size-3.5" />
+                                    <span>Assignments</span>
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                    onClick={() => setActiveTab("submissions")}
+                                >
+                                    <History className="mr-2 size-3.5" />
+                                    <span>Submissions</span>
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                    onClick={() =>
+                                        setTheme(
+                                            theme === "dark" ? "light" : "dark"
+                                        )
+                                    }
+                                >
+                                    {theme === "dark" ? (
+                                        <Sun className="mr-2 size-3.5" />
+                                    ) : (
+                                        <Moon className="mr-2 size-3.5" />
+                                    )}
+                                    <span>
+                                        {theme === "dark"
+                                            ? "Switch to Light Mode"
+                                            : "Switch to Dark Mode"}
+                                    </span>
+                                </DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
                     </div>
                 </div>
             </div>
