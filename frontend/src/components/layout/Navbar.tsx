@@ -1,26 +1,17 @@
 import { Code2, Play, Send, Sun, Moon, User } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useTheme } from "@/components/theme-provider"
+import { useWorkspace } from "@/context/WorkspaceContext"
 import type { ActiveNavTab } from "@/types"
 
 interface NavbarProps {
   activeTab: ActiveNavTab
   setActiveTab: (tab: ActiveNavTab) => void
-  onRunCode: () => void
-  onSubmitCode: () => void
-  isRunning: boolean
-  isSubmitting: boolean
 }
 
-export function Navbar({
-  activeTab,
-  setActiveTab,
-  onRunCode,
-  onSubmitCode,
-  isRunning,
-  isSubmitting,
-}: NavbarProps) {
+export function Navbar({ activeTab, setActiveTab }: NavbarProps) {
   const { theme, setTheme } = useTheme()
+  const { runCode, submitCode, isRunning, isSubmitting } = useWorkspace()
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/60">
@@ -80,7 +71,7 @@ export function Navbar({
               <Button
                 variant="outline"
                 size="sm"
-                onClick={onRunCode}
+                onClick={runCode}
                 disabled={isRunning || isSubmitting}
                 className="h-8 gap-1.5 text-xs font-semibold"
               >
@@ -92,7 +83,7 @@ export function Navbar({
 
               <Button
                 size="sm"
-                onClick={onSubmitCode}
+                onClick={submitCode}
                 disabled={isRunning || isSubmitting}
                 className="h-8 gap-1.5 bg-emerald-600 text-xs font-semibold text-white hover:bg-emerald-700"
               >
