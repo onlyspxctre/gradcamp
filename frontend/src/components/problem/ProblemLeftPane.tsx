@@ -13,6 +13,7 @@ import {
     SubmissionStatusBadge,
 } from "@/components/common/StatusBadges"
 import { Button } from "@/components/ui/button"
+import { AddTwoIntegersVisualizer } from "./AddTwoIntegersVisualizer"
 
 interface ProblemLeftPaneProps {
     problem: Problem
@@ -109,6 +110,9 @@ export function ProblemLeftPane({
                                     </p>
                                 ))}
                         </div>
+                        {/* Interactive Execution Slideshow (For Add Two Integers) */}
+                        {(problem.slug === "add-two-integers" ||
+                            problem.id === "1") && <AddTwoIntegersVisualizer />}
 
                         {/* Examples Section */}
                         <div className="space-y-4 pt-2">
