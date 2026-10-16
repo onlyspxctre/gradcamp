@@ -32,7 +32,7 @@ export function AddTwoIntegersVisualizer() {
     const [num1, setNum1] = useState<number>(12)
     const [num2, setNum2] = useState<number>(5)
     const [currentStep, setCurrentStep] = useState<number>(0)
-    const [isPlaying, setIsPlaying] = useState<boolean>(false)
+    const [isPlaying, setIsPlaying] = useState<boolean>(true)
     const [direction, setDirection] = useState<number>(1)
 
     const sum = num1 + num2
@@ -205,17 +205,6 @@ export function AddTwoIntegersVisualizer() {
                                       : "border-border/40 bg-muted/10 text-muted-foreground hover:bg-muted/30"
                             }`}
                         >
-                            {isActive && (
-                                <motion.div
-                                    layoutId="active-step-bar"
-                                    className="absolute inset-x-0 -top-px h-0.5 rounded-t-md bg-primary"
-                                    transition={{
-                                        type: "spring",
-                                        stiffness: 380,
-                                        damping: 30,
-                                    }}
-                                />
-                            )}
                             <div className="flex w-full items-center justify-between font-mono text-[10px] font-bold">
                                 <span>Step {idx + 1}</span>
                                 {isPast && (
@@ -233,7 +222,7 @@ export function AddTwoIntegersVisualizer() {
             {/* Animation Canvas Arena */}
             <div className="relative mt-4 overflow-hidden rounded-xl border border-border bg-gradient-to-b from-muted/40 to-muted/10 p-4">
                 {/* Code Execution Strip */}
-                <div className="mb-4 rounded-lg border border-border/80 bg-background/80 p-2.5 font-mono text-[11px]">
+                <div className="mb-4 hidden rounded-lg border border-border/80 bg-background/80 p-2.5 font-mono text-[11px]">
                     <div className="flex items-center gap-1.5 border-b border-border/50 pb-1.5 font-sans text-[10px] font-medium text-muted-foreground">
                         <CornerDownRight className="size-3 text-primary" />
                         <span>C Function Call Trace:</span>
@@ -395,7 +384,7 @@ export function AddTwoIntegersVisualizer() {
                                     </div>
                                 </div>
 
-                                <div className="flex items-center justify-center gap-3">
+                                <div className="flex items-center justify-center gap-3 pt-5">
                                     <motion.div
                                         initial={{ x: -20, opacity: 0 }}
                                         animate={{ x: 0, opacity: 1 }}
@@ -403,9 +392,9 @@ export function AddTwoIntegersVisualizer() {
                                             type: "spring",
                                             stiffness: 300,
                                         }}
-                                        className="flex flex-col items-center gap-1"
+                                        className="relative"
                                     >
-                                        <span className="font-mono text-[10px] font-semibold text-blue-500">
+                                        <span className="absolute bottom-full left-1/2 -translate-x-1/2 pb-1 font-mono text-[10px] font-semibold whitespace-nowrap text-blue-500 select-none">
                                             a
                                         </span>
                                         <div className="flex size-11 items-center justify-center rounded-lg border-2 border-blue-500 bg-blue-500/15 font-mono text-base font-bold text-blue-600 shadow-sm dark:text-blue-400">
@@ -431,9 +420,9 @@ export function AddTwoIntegersVisualizer() {
                                             type: "spring",
                                             stiffness: 300,
                                         }}
-                                        className="flex flex-col items-center gap-1"
+                                        className="relative"
                                     >
-                                        <span className="font-mono text-[10px] font-semibold text-amber-500">
+                                        <span className="absolute bottom-full left-1/2 -translate-x-1/2 pb-1 font-mono text-[10px] font-semibold whitespace-nowrap text-amber-500 select-none">
                                             b
                                         </span>
                                         <div className="flex size-11 items-center justify-center rounded-lg border-2 border-amber-500 bg-amber-500/15 font-mono text-base font-bold text-amber-600 shadow-sm dark:text-amber-400">
