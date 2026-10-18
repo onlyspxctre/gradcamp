@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-BIN_PATH="${BIN_PATH:-/workspace/bin/main}"
+BIN_PATH="${BIN_PATH:-/workspace/evaluator}"
 RESULTS_FILE="${RESULTS_FILE:-/workspace/out/results.json}"
 
 if [ ! -f "$BIN_PATH" ]; then

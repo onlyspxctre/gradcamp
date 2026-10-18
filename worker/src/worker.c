@@ -20,7 +20,7 @@ static int valid_job_id(const char *id) {
     size_t len = strlen(id);
     if (len == 0 || len > 128) return 0;
     for (size_t i = 0; i < len; ++i) {
-        if (!(isalnum((unsigned char)id[i]) || id[i] == '-' || id[i] == '_')) return 0;
+        if (!(isalnum((unsigned char) id[i]) || id[i] == '-' || id[i] == '_')) return 0;
     }
     return 1;
 }
@@ -28,27 +28,29 @@ static int valid_job_id(const char *id) {
 static int ensure_job_dirs(const char *id) {
     char path[160];
     int n = snprintf(path, sizeof(path), "./job/%s", id);
-    if (n < 0 || (size_t)n >= sizeof(path)) return -1;
+    if (n < 0 || (size_t) n >= sizeof(path)) return -1;
 
     if (mkdir("./job", 0755) != 0 && errno != EEXIST) return -1;
     if (mkdir(path, 0755) != 0 && errno != EEXIST) return -1;
 
     n = snprintf(path, sizeof(path), "./job/%s/src", id);
-    if (n < 0 || (size_t)n >= sizeof(path) || (mkdir(path, 0755) != 0 && errno != EEXIST)) return -1;
+    if (n < 0 || (size_t) n >= sizeof(path) || (mkdir(path, 0755) != 0 && errno != EEXIST)) return -1;
 
     n = snprintf(path, sizeof(path), "./job/%s/bin", id);
-    if (n < 0 || (size_t)n >= sizeof(path) || (mkdir(path, 0755) != 0 && errno != EEXIST)) return -1;
+    if (n < 0 || (size_t) n >= sizeof(path) || (mkdir(path, 0755) != 0 && errno != EEXIST)) return -1;
 
     n = snprintf(path, sizeof(path), "./job/%s/out", id);
-    if (n < 0 || (size_t)n >= sizeof(path) || (mkdir(path, 0755) != 0 && errno != EEXIST)) return -1;
+    if (n < 0 || (size_t) n >= sizeof(path) || (mkdir(path, 0755) != 0 && errno != EEXIST)) return -1;
 
     return 0;
 }
 
-static void runner(const char *id) {
-    char bin_mount[256], out_mount[256];
+static void executor(const char *id, const char *question_id) {
+    char bin_mount[256], out_mount[256], eval_mount[256];
     snprintf(bin_mount, sizeof(bin_mount), "type=bind,src=./job/%s/bin,dst=/workspace/bin,ro,relabel=private", id);
     snprintf(out_mount, sizeof(out_mount), "type=bind,src=./job/%s/out,dst=/workspace/out,rw,relabel=private", id);
+    snprintf(eval_mount, sizeof(eval_mount),
+            "type=bind,src=./questions/%s/evaluator,dst=/workspace/evaluator,ro,relabel=shared", question_id);
 
     char *args[] = {
         "docker",
@@ -62,25 +64,32 @@ static void runner(const char *id) {
         "--read-only",
         "--user=1000:1000",
         "--cap-drop=ALL",
-        "--security-opt=no-new-privileges:true",
+        "--cap-add=SETUID",
+        "--cap-add=SETGID",
         "--tmpfs=/tmp:rw,noexec,nosuid,size=16m",
-        "--mount", bin_mount,
-        "--mount", out_mount,
-        "-e", "RESULTS_FILE=/workspace/out/results.json",
+        "--mount",
+        bin_mount,
+        "--mount",
+        out_mount,
+        "--mount",
+        eval_mount,
+        "-e",
+        "RESULTS_FILE=/workspace/out/results.json",
         "--userns=keep-id",
-        "runner:latest",
+        "executor:latest",
         NULL,
     };
     execvp(args[0], args);
 
-    perror("Runner execvp failed");
+    perror("Executor execvp failed");
     exit(1);
 }
 
-static void compiler(const char *id) {
-    char src_mount[256], bin_mount[256];
+static void compiler(const char *id, const char *question_id) {
+    char src_mount[256], bin_mount[256], driver_mount[256];
     snprintf(src_mount, sizeof(src_mount), "type=bind,src=./job/%s/src,dst=/workspace/src,ro,relabel=private", id);
     snprintf(bin_mount, sizeof(bin_mount), "type=bind,src=./job/%s/bin,dst=/workspace/bin,rw,relabel=private", id);
+    snprintf(driver_mount, sizeof(driver_mount), "type=bind,src=./questions/%s/driver.c,dst=/workspace/driver/driver.c,ro,relabel=shared", question_id);
 
     char *args[] = {
         "docker",
@@ -96,8 +105,12 @@ static void compiler(const char *id) {
         "--cap-drop=ALL",
         "--security-opt=no-new-privileges:true",
         "--tmpfs=/tmp:rw,noexec,nosuid,size=16m",
-        "--mount", src_mount,
-        "--mount", bin_mount,
+        "--mount",
+        src_mount,
+        "--mount",
+        bin_mount,
+        "--mount",
+        driver_mount,
         "--userns=keep-id",
         "compiler:latest",
         NULL,
@@ -108,7 +121,7 @@ static void compiler(const char *id) {
     exit(1);
 }
 
-static void job(const char *id) {
+static void job(const char *id, const char *question_id) {
     // 1. Ensure scratch directories exist
     if (ensure_job_dirs(id) != 0) {
         fprintf(stderr, "Failed to create directory structure for job %s\n", id);
@@ -138,7 +151,7 @@ static void job(const char *id) {
         return;
     }
 
-    if (fwrite(reply->str, 1, reply->len, fp) != (size_t)reply->len) {
+    if (fwrite(reply->str, 1, reply->len, fp) != (size_t) reply->len) {
         perror("Failed to write source file");
         fclose(fp);
         freeReplyObject(reply);
@@ -157,7 +170,7 @@ static void job(const char *id) {
         if (reply) freeReplyObject(reply);
         return;
     } else if (pid == 0) {
-        compiler(id);
+        compiler(id, question_id);
     }
 
     int status = 0;
@@ -172,12 +185,12 @@ static void job(const char *id) {
     // 4. Run
     pid = fork();
     if (pid < 0) {
-        fprintf(stderr, "Runner fork failed for job %s\n", id);
+        fprintf(stderr, "Executor fork failed for job %s\n", id);
         reply = gradcamp_redis_run_cmd("HSET job:%s status failed error %s", id, "Runner process fork failed");
         if (reply) freeReplyObject(reply);
         return;
     } else if (pid == 0) {
-        runner(id);
+        executor(id, question_id);
     }
 
     waitpid(pid, &status, 0);
@@ -204,7 +217,7 @@ static void job(const char *id) {
         return;
     }
 
-    char *results_buf = malloc((size_t)rlen + 1);
+    char *results_buf = malloc((size_t) rlen + 1);
     if (!results_buf) {
         fclose(rf);
         reply = gradcamp_redis_run_cmd("HSET job:%s status failed error %s", id, "Memory allocation error");
@@ -212,7 +225,7 @@ static void job(const char *id) {
         return;
     }
 
-    size_t bytes_read = fread(results_buf, 1, (size_t)rlen, rf);
+    size_t bytes_read = fread(results_buf, 1, (size_t) rlen, rf);
     fclose(rf);
     results_buf[bytes_read] = '\0';
 
@@ -272,9 +285,10 @@ int main(void) {
             fprintf(stderr, "Job fork failed for %s\n", job_id);
             continue;
         } else if (pid == 0) {
+            signal(SIGCHLD, SIG_DFL);
             gradcamp_redis_free();
             if (gradcamp_redis_init() == 0) {
-                job(job_id);
+                job(job_id, "0000-0000-add-two-integers"); // TODO: currently only supports one question for now, this is a major point of issue to fix
                 gradcamp_redis_free();
             }
             exit(0);

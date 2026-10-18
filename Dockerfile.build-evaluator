@@ -1,0 +1,14 @@
+# Dockerfile.evaluator-builder
+FROM alpine:edge
+
+# Enable community repo (where yyjson lives) and install dependencies
+RUN apk add --no-cache \
+    build-base \
+    pkgconf \
+    yyjson-dev \
+    yyjson-static
+
+WORKDIR /work
+
+# Default to executing 'make' in the mounted question directory
+ENTRYPOINT ["make"]

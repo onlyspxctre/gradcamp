@@ -26,7 +26,7 @@ RUN rm -rf /sbin/apk /etc/apk /lib/apk /var/cache/apk/*
 RUN adduser -D -u 1000 -s /bin/sh grader && \
     mkdir -p /workspace/src /workspace/bin && \
     chown -R grader:grader /workspace
-COPY test_add.c /usr/local/src/test_add.c
+
 COPY compile.sh /usr/local/bin/compile.sh
 RUN chmod 0755 /usr/local/bin/compile.sh
 

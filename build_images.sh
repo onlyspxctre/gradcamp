@@ -14,9 +14,15 @@ echo "=========================================="
 
 echo ""
 echo "=========================================="
-echo " Building runner:latest"
+echo " Building executor:latest"
 echo "=========================================="
-"$CONTAINER_CMD" build -t runner:latest -f Dockerfile.runner .
+"$CONTAINER_CMD" build -t executor:latest -f Dockerfile.executor .
 
 echo ""
-echo "Successfully built compiler:latest and runner:latest images."
+echo "=========================================="
+echo " Building evalmaker:latest"
+echo "=========================================="
+"$CONTAINER_CMD" build -t evalmaker:latest -f Dockerfile.build-evaluator .
+
+echo ""
+echo "Successfully built Docker images."
