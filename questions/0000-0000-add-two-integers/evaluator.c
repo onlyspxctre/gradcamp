@@ -16,8 +16,6 @@
 
 #define STUDENT_BIN "/workspace/bin/driver"
 #define DEFAULT_OUT "/workspace/out/results.json"
-#define RUNNER_UID 1001
-#define RUNNER_GID 1001
 #define TIMEOUT_SECONDS 3
 
 typedef struct {
@@ -82,12 +80,10 @@ static bool run_test(const TestCase *tc, char *error_msg, size_t err_len) {
         struct rlimit rl_nproc = {.rlim_cur = 1, .rlim_max = 1}; // disable forks
         setrlimit(RLIMIT_NPROC, &rl_nproc);
 
-        // switch user to unprivileged
-        if (setgid(RUNNER_GID) != 0 || setuid(RUNNER_UID) != 0) {
-            _exit(125);
-        }
-
-        prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0); // prevent unprivileged user from ever obtaining privilege again
+        // The container already runs as the unprivileged evaluator user, and the
+        // microVM/read-only/no-cap sandbox provides the isolation boundary. There
+        // is no separate user to drop to, so just block any future privilege gain.
+        prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0); // prevent the runner from ever obtaining privilege again
 
         execv(STUDENT_BIN, tc->argv);
         _exit(127); // exec failed

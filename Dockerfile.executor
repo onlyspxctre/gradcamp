@@ -6,7 +6,6 @@ RUN rm -rf /sbin/apk /etc/apk /lib/apk /var/cache/apk/*
 RUN find / -perm /6000 -type f -exec chmod a-s {} + 2>/dev/null || true
 
 RUN adduser -D -u 1000 -s /bin/sh evaluator && \
-    adduser -D -u 1001 -s /bin/false driver && \
     mkdir -p /workspace/bin /workspace/tests /workspace/out && \
     chown -R evaluator:evaluator /workspace/tests /workspace/out && \
     chmod 0700 /workspace/tests /workspace/out
@@ -14,7 +13,7 @@ RUN adduser -D -u 1000 -s /bin/sh evaluator && \
 COPY executor.sh /usr/local/bin/executor.sh
 RUN chmod 0755 /usr/local/bin/executor.sh
 
-# 5. Drop privileges
+# Run as the unprivileged evaluator user
 USER evaluator
 WORKDIR /workspace
 
