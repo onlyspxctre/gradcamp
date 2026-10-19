@@ -58,9 +58,9 @@ export async function submitToBackendQueue(
         )
 
         // Poll /fetch?job=
-        const maxPolls = 30
+        const maxPolls = 50
         for (let i = 0; i < maxPolls; i++) {
-            await new Promise((r) => setTimeout(r, 800))
+            await new Promise((r) => setTimeout(r, 100))
 
             const fetchRes = await fetch(`/fetch?job=${jobId}`)
             if (!fetchRes.ok) {
