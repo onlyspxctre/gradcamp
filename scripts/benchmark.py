@@ -14,9 +14,12 @@ Features:
 """
 
 import argparse
+import contextlib
+import io
 import json
 import math
 import os
+import re
 import statistics
 import subprocess
 import sys
@@ -25,6 +28,7 @@ import urllib.error
 import urllib.request
 import uuid
 from typing import Any, Dict, List, Optional, Tuple
+
 
 DEFAULT_URL = "http://localhost:3000"
 DEFAULT_POLL_INTERVAL_MS = 25.0
@@ -60,6 +64,56 @@ def red(text: str) -> str: return color(text, "31")
 def yellow(text: str) -> str: return color(text, "33")
 def cyan(text: str) -> str: return color(text, "36")
 def dim(text: str) -> str: return color(text, "2")
+
+ANSI_ESCAPE_RE = re.compile(r'\x1b\[[0-9;]*[a-zA-Z]')
+
+class TeeWriter:
+    """Duplicates stdout/stderr to a file while stripping terminal ANSI escape codes."""
+    def __init__(self, original_stream, log_file):
+        self.original_stream = original_stream
+        self.log_file = log_file
+
+    def write(self, s: str) -> int:
+        self.original_stream.write(s)
+        self.original_stream.flush()
+        clean_text = ANSI_ESCAPE_RE.sub('', s)
+        self.log_file.write(clean_text)
+        self.log_file.flush()
+        return len(s)
+
+    def flush(self) -> None:
+        self.original_stream.flush()
+        self.log_file.flush()
+
+    def isatty(self) -> bool:
+        return getattr(self.original_stream, "isatty", lambda: False)()
+
+    @property
+    def encoding(self) -> str:
+        return getattr(self.original_stream, "encoding", "utf-8")
+
+@contextlib.contextmanager
+def capture_output(log_path: Optional[str]):
+    """Context manager to duplicate stdout and stderr to a log file if log_path is provided."""
+    if not log_path:
+        yield
+        return
+    log_dir = os.path.dirname(os.path.abspath(log_path))
+    if log_dir:
+        os.makedirs(log_dir, exist_ok=True)
+    with open(log_path, "w", encoding="utf-8") as f:
+        orig_stdout = sys.stdout
+        orig_stderr = sys.stderr
+        tee_out = TeeWriter(orig_stdout, f)
+        tee_err = TeeWriter(orig_stderr, f)
+        sys.stdout = tee_out
+        sys.stderr = tee_err
+        try:
+            yield
+        finally:
+            sys.stdout = orig_stdout
+            sys.stderr = orig_stderr
+
 
 def get_git_info() -> Dict[str, str]:
     try:
@@ -323,174 +377,198 @@ def main():
     parser.add_argument("--file", type=str, default=None, help="Custom C source file to submit")
     parser.add_argument("--test-type", choices=["valid", "wrong", "compile_error"], default="valid",
                         help="Pre-configured test submission type")
-    parser.add_argument("--save", "-s", type=str, default=None, help="Save benchmark results to JSON file")
-    parser.add_argument("--compare", "-c", type=str, default=None, help="Compare results against a saved JSON baseline")
+    parser.add_argument("--save", "-s", type=str, default=None,
+                        help="Save benchmark results to JSON file (and stdout to matching .log or .txt)")
+    parser.add_argument("--compare", "-c", type=str, default=None,
+                        help="Compare results against a saved JSON baseline")
+    parser.add_argument("--no-log", action="store_true",
+                        help="Disable saving stdout log to file")
+    parser.add_argument("--log-ext", choices=["log", "txt"], default="log",
+                        help="Extension for the stdout log file when using --save (default: log)")
+    parser.add_argument("--log-file", type=str, default=None,
+                        help="Explicit path to save stdout log file")
 
     args = parser.parse_args()
 
-    # Pre-flight health check
-    if not check_backend_health(args.url):
-        print(red(f"\n[!] Error: Unable to connect to Gradcamp backend at {args.url}"), file=sys.stderr)
-        print(yellow("    Please ensure the services are running:"), file=sys.stderr)
-        print("      1. Start Redis/Valkey: sudo systemctl start valkey  (or redis-server &)")
-        print("      2. Start Backend & Worker: ./start_dev.sh\n", file=sys.stderr)
-        sys.exit(1)
+    # Determine log path
+    log_path = None
+    if not args.no_log:
+        if args.log_file:
+            log_path = args.log_file
+        elif args.save:
+            base, _ = os.path.splitext(args.save)
+            ext = args.log_ext.lstrip(".")
+            log_path = f"{base}.{ext}"
 
-    # Determine source code payload
-    if args.file:
-        with open(args.file, "r") as f:
-            source_code = f.read()
-        test_desc = f"File: {args.file}"
-    elif args.test_type == "wrong":
-        source_code = SAMPLE_WRONG_SOLUTION
-        test_desc = "Wrong Answer (adds instead of subtracts)"
-    elif args.test_type == "compile_error":
-        source_code = SAMPLE_COMPILE_ERROR
-        test_desc = "Compile Error (syntax error)"
-    else:
-        source_code = SAMPLE_VALID_SOLUTION
-        test_desc = "Valid Solution (3/3 passing tests)"
+    with capture_output(log_path):
+        # Pre-flight health check
+        if not check_backend_health(args.url):
+            print(red(f"\n[!] Error: Unable to connect to Gradcamp backend at {args.url}"), file=sys.stderr)
+            print(yellow("    Please ensure the services are running:"), file=sys.stderr)
+            print("      1. Start Redis/Valkey: sudo systemctl start valkey  (or redis-server &)")
+            print("      2. Start Backend & Worker: ./start_dev.sh\n", file=sys.stderr)
+            sys.exit(1)
 
-    git_info = get_git_info()
-    poll_sec = args.poll_ms / 1000.0
 
-    print("\n" + bold("========================================================================="))
-    print(bold("             GRADCAMP SUBMISSION LATENCY BENCHMARK                       "))
-    print(bold("========================================================================="))
-    print(f" Target URL:        {cyan(args.url)}")
-    print(f" Git Commit:        {cyan(git_info['commit'])} ({git_info['branch']})")
-    print(f" Payload:           {test_desc}")
-    print(f" Iterations:        {args.runs} runs (Warmup: {args.warmup})")
-    print(f" Poll Resolution:   {args.poll_ms:.1f} ms")
-    print("-------------------------------------------------------------------------")
+        # Determine source code payload
+        if args.file:
+            with open(args.file, "r") as f:
+                source_code = f.read()
+            test_desc = f"File: {args.file}"
+        elif args.test_type == "wrong":
+            source_code = SAMPLE_WRONG_SOLUTION
+            test_desc = "Wrong Answer (adds instead of subtracts)"
+        elif args.test_type == "compile_error":
+            source_code = SAMPLE_COMPILE_ERROR
+            test_desc = "Compile Error (syntax error)"
+        else:
+            source_code = SAMPLE_VALID_SOLUTION
+            test_desc = "Valid Solution (3/3 passing tests)"
 
-    # Warmup runs
-    if args.warmup > 0:
-        print(dim(f"Performing {args.warmup} warm-up run(s)..."))
-        for w in range(args.warmup):
+        git_info = get_git_info()
+        poll_sec = args.poll_ms / 1000.0
+
+        print("\n" + bold("========================================================================="))
+        print(bold("             GRADCAMP SUBMISSION LATENCY BENCHMARK                       "))
+        print(bold("========================================================================="))
+        print(f" Target URL:        {cyan(args.url)}")
+        print(f" Git Commit:        {cyan(git_info['commit'])} ({git_info['branch']})")
+        print(f" Payload:           {test_desc}")
+        print(f" Iterations:        {args.runs} runs (Warmup: {args.warmup})")
+        print(f" Poll Resolution:   {args.poll_ms:.1f} ms")
+        print("-------------------------------------------------------------------------")
+
+        # Warmup runs
+        if args.warmup > 0:
+            print(dim(f"Performing {args.warmup} warm-up run(s)..."))
+            for w in range(args.warmup):
+                res = run_single_submission(args.url, source_code, poll_sec, args.timeout)
+                if res.get("error"):
+                    print(yellow(f"  Warmup {w+1} error: {res['error']}"))
+                else:
+                    print(dim(f"  Warmup {w+1}: completed in {res['total_e2e_ms']:.1f}ms"))
+
+        # Active Benchmark runs
+        results: List[Dict[str, Any]] = []
+        print("\n" + bold("Running benchmark iterations:"))
+
+        for i in range(1, args.runs + 1):
             res = run_single_submission(args.url, source_code, poll_sec, args.timeout)
-            if res.get("error"):
-                print(yellow(f"  Warmup {w+1} error: {res['error']}"))
+            if res.get("status") in ("completed", "failed"):
+                status_tag = green("PASS") if res.get("status") == "completed" and res.get("passed_tests") == res.get("total_tests") else yellow(res.get("status").upper())
+                test_info = f"({res.get('passed_tests')}/{res.get('total_tests')} tests)" if res.get("total_tests") else ""
+                print(f"  Run {i}/{args.runs} [{res['job_id']}]: {bold(f'{res['total_e2e_ms']:.1f}ms')} "
+                      f"[Upload: {res['upload_ms']:.1f}ms | Queue: {res['queue_pickup_ms']:.1f}ms | VM/Exec: {res['execution_ms']:.1f}ms] "
+                      f"-> {status_tag} {test_info}")
+                results.append(res)
             else:
-                print(dim(f"  Warmup {w+1}: completed in {res['total_e2e_ms']:.1f}ms"))
+                print(red(f"  Run {i}/{args.runs} [{res.get('job_id')}]: FAILED - {res.get('error')}"))
 
-    # Active Benchmark runs
-    results: List[Dict[str, Any]] = []
-    print("\n" + bold("Running benchmark iterations:"))
+        if not results:
+            print(red("\nAll benchmark iterations failed. Check worker and container logs."))
+            sys.exit(1)
 
-    for i in range(1, args.runs + 1):
-        res = run_single_submission(args.url, source_code, poll_sec, args.timeout)
-        if res.get("status") in ("completed", "failed"):
-            status_tag = green("PASS") if res.get("status") == "completed" and res.get("passed_tests") == res.get("total_tests") else yellow(res.get("status").upper())
-            test_info = f"({res.get('passed_tests')}/{res.get('total_tests')} tests)" if res.get("total_tests") else ""
-            print(f"  Run {i}/{args.runs} [{res['job_id']}]: {bold(f'{res['total_e2e_ms']:.1f}ms')} "
-                  f"[Upload: {res['upload_ms']:.1f}ms | Queue: {res['queue_pickup_ms']:.1f}ms | VM/Exec: {res['execution_ms']:.1f}ms] "
-                  f"-> {status_tag} {test_info}")
-            results.append(res)
-        else:
-            print(red(f"  Run {i}/{args.runs} [{res.get('job_id')}]: FAILED - {res.get('error')}"))
+        # Compute Statistics
+        summary = {
+            "total_e2e_ms": compute_stats([r["total_e2e_ms"] for r in results]),
+            "execution_ms": compute_stats([r["execution_ms"] for r in results]),
+            "queue_pickup_ms": compute_stats([r["queue_pickup_ms"] for r in results]),
+            "upload_ms": compute_stats([r["upload_ms"] for r in results]),
+            "frontend_sim_ms": compute_stats([r["frontend_sim_ms"] for r in results])
+        }
 
-    if not results:
-        print(red("\nAll benchmark iterations failed. Check worker and container logs."))
-        sys.exit(1)
-
-    # Compute Statistics
-    summary = {
-        "total_e2e_ms": compute_stats([r["total_e2e_ms"] for r in results]),
-        "execution_ms": compute_stats([r["execution_ms"] for r in results]),
-        "queue_pickup_ms": compute_stats([r["queue_pickup_ms"] for r in results]),
-        "upload_ms": compute_stats([r["upload_ms"] for r in results]),
-        "frontend_sim_ms": compute_stats([r["frontend_sim_ms"] for r in results])
-    }
-
-    # Print Summary Table
-    print("\n" + bold("========================================================================="))
-    print(bold("                         LATENCY SUMMARY (ms)                            "))
-    print(bold("========================================================================="))
-    headers = ["Lifecycle Stage", "Mean", "Median (p50)", "Min", "Max", "p95", "StdDev"]
-    rows = [
-        [
-            bold("1. Upload HTTP"),
-            f"{summary['upload_ms']['mean']:.2f}",
-            f"{summary['upload_ms']['median']:.2f}",
-            f"{summary['upload_ms']['min']:.2f}",
-            f"{summary['upload_ms']['max']:.2f}",
-            f"{summary['upload_ms']['p95']:.2f}",
-            f"{summary['upload_ms']['std_dev']:.2f}",
-        ],
-        [
-            bold("2. Queue Pickup (Redis)"),
-            f"{summary['queue_pickup_ms']['mean']:.2f}",
-            f"{summary['queue_pickup_ms']['median']:.2f}",
-            f"{summary['queue_pickup_ms']['min']:.2f}",
-            f"{summary['queue_pickup_ms']['max']:.2f}",
-            f"{summary['queue_pickup_ms']['p95']:.2f}",
-            f"{summary['queue_pickup_ms']['std_dev']:.2f}",
-        ],
-        [
-            bold("3. Container & VM Exec"),
-            f"{summary['execution_ms']['mean']:.2f}",
-            f"{summary['execution_ms']['median']:.2f}",
-            f"{summary['execution_ms']['min']:.2f}",
-            f"{summary['execution_ms']['max']:.2f}",
-            f"{summary['execution_ms']['p95']:.2f}",
-            f"{summary['execution_ms']['std_dev']:.2f}",
-        ],
-        [
-            cyan(bold("Total End-to-End Latency")),
-            cyan(f"{summary['total_e2e_ms']['mean']:.2f}"),
-            cyan(f"{summary['total_e2e_ms']['median']:.2f}"),
-            cyan(f"{summary['total_e2e_ms']['min']:.2f}"),
-            cyan(f"{summary['total_e2e_ms']['max']:.2f}"),
-            cyan(f"{summary['total_e2e_ms']['p95']:.2f}"),
-            cyan(f"{summary['total_e2e_ms']['std_dev']:.2f}"),
-        ],
-        [
-            dim("Simulated Frontend (800ms)"),
-            dim(f"{summary['frontend_sim_ms']['mean']:.2f}"),
-            dim(f"{summary['frontend_sim_ms']['median']:.2f}"),
-            dim(f"{summary['frontend_sim_ms']['min']:.2f}"),
-            dim(f"{summary['frontend_sim_ms']['max']:.2f}"),
-            dim(f"{summary['frontend_sim_ms']['p95']:.2f}"),
-            dim(f"{summary['frontend_sim_ms']['std_dev']:.2f}"),
+        # Print Summary Table
+        print("\n" + bold("========================================================================="))
+        print(bold("                         LATENCY SUMMARY (ms)                            "))
+        print(bold("========================================================================="))
+        headers = ["Lifecycle Stage", "Mean", "Median (p50)", "Min", "Max", "p95", "StdDev"]
+        rows = [
+            [
+                bold("1. Upload HTTP"),
+                f"{summary['upload_ms']['mean']:.2f}",
+                f"{summary['upload_ms']['median']:.2f}",
+                f"{summary['upload_ms']['min']:.2f}",
+                f"{summary['upload_ms']['max']:.2f}",
+                f"{summary['upload_ms']['p95']:.2f}",
+                f"{summary['upload_ms']['std_dev']:.2f}",
+            ],
+            [
+                bold("2. Queue Pickup (Redis)"),
+                f"{summary['queue_pickup_ms']['mean']:.2f}",
+                f"{summary['queue_pickup_ms']['median']:.2f}",
+                f"{summary['queue_pickup_ms']['min']:.2f}",
+                f"{summary['queue_pickup_ms']['max']:.2f}",
+                f"{summary['queue_pickup_ms']['p95']:.2f}",
+                f"{summary['queue_pickup_ms']['std_dev']:.2f}",
+            ],
+            [
+                bold("3. Container & VM Exec"),
+                f"{summary['execution_ms']['mean']:.2f}",
+                f"{summary['execution_ms']['median']:.2f}",
+                f"{summary['execution_ms']['min']:.2f}",
+                f"{summary['execution_ms']['max']:.2f}",
+                f"{summary['execution_ms']['p95']:.2f}",
+                f"{summary['execution_ms']['std_dev']:.2f}",
+            ],
+            [
+                cyan(bold("Total End-to-End Latency")),
+                cyan(f"{summary['total_e2e_ms']['mean']:.2f}"),
+                cyan(f"{summary['total_e2e_ms']['median']:.2f}"),
+                cyan(f"{summary['total_e2e_ms']['min']:.2f}"),
+                cyan(f"{summary['total_e2e_ms']['max']:.2f}"),
+                cyan(f"{summary['total_e2e_ms']['p95']:.2f}"),
+                cyan(f"{summary['total_e2e_ms']['std_dev']:.2f}"),
+            ],
+            [
+                dim("Simulated Frontend (800ms)"),
+                dim(f"{summary['frontend_sim_ms']['mean']:.2f}"),
+                dim(f"{summary['frontend_sim_ms']['median']:.2f}"),
+                dim(f"{summary['frontend_sim_ms']['min']:.2f}"),
+                dim(f"{summary['frontend_sim_ms']['max']:.2f}"),
+                dim(f"{summary['frontend_sim_ms']['p95']:.2f}"),
+                dim(f"{summary['frontend_sim_ms']['std_dev']:.2f}"),
+            ]
         ]
-    ]
-    print_table(headers, rows)
-    print("-------------------------------------------------------------------------")
+        print_table(headers, rows)
+        print("-------------------------------------------------------------------------")
 
-    # Key Bottleneck Insight
-    exec_pct = (summary["execution_ms"]["mean"] / summary["total_e2e_ms"]["mean"]) * 100.0 if summary["total_e2e_ms"]["mean"] > 0 else 0.0
-    queue_pct = (summary["queue_pickup_ms"]["mean"] / summary["total_e2e_ms"]["mean"]) * 100.0 if summary["total_e2e_ms"]["mean"] > 0 else 0.0
-    print(f" Container & MicroVM lifecycle accounts for {bold(f'{exec_pct:.1f}%')} of total submission time.")
-    print(f" Redis queue polling delay accounts for {bold(f'{queue_pct:.1f}%')} of total submission time.")
+        # Key Bottleneck Insight
+        exec_pct = (summary["execution_ms"]["mean"] / summary["total_e2e_ms"]["mean"]) * 100.0 if summary["total_e2e_ms"]["mean"] > 0 else 0.0
+        queue_pct = (summary["queue_pickup_ms"]["mean"] / summary["total_e2e_ms"]["mean"]) * 100.0 if summary["total_e2e_ms"]["mean"] > 0 else 0.0
+        print(f" Container & MicroVM lifecycle accounts for {bold(f'{exec_pct:.1f}%')} of total submission time.")
+        print(f" Redis queue polling delay accounts for {bold(f'{queue_pct:.1f}%')} of total submission time.")
 
-    current_data = {
-        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-        "git": git_info,
-        "config": {
-            "runs": args.runs,
-            "warmup": args.warmup,
-            "poll_interval_ms": args.poll_ms,
-            "test_type": args.test_type
-        },
-        "summary": summary,
-        "runs_raw": results
-    }
+        current_data = {
+            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "git": git_info,
+            "config": {
+                "runs": args.runs,
+                "warmup": args.warmup,
+                "poll_interval_ms": args.poll_ms,
+                "test_type": args.test_type
+            },
+            "summary": summary,
+            "runs_raw": results
+        }
 
-    # Save to JSON if requested
-    if args.save:
-        with open(args.save, "w") as f:
-            json.dump(current_data, f, indent=2)
-        print(f"\n[+] Baseline results saved to: {green(args.save)}")
+        # Save to JSON if requested
+        if args.save:
+            with open(args.save, "w", encoding="utf-8") as f:
+                json.dump(current_data, f, indent=2)
+            print(f"\n[+] Baseline results saved to: {green(args.save)}")
 
-    # Compare with existing baseline if requested
-    if args.compare:
-        if not os.path.exists(args.compare):
-            print(red(f"\n[!] Baseline file not found: {args.compare}"))
-        else:
-            with open(args.compare, "r") as f:
-                baseline_data = json.load(f)
-            print_comparison(baseline_data, current_data)
+        if log_path:
+            prefix = "\n" if not args.save else ""
+            print(f"{prefix}[+] Stdout log saved to:        {green(log_path)}")
+
+        # Compare with existing baseline if requested
+        if args.compare:
+            if not os.path.exists(args.compare):
+                print(red(f"\n[!] Baseline file not found: {args.compare}"))
+            else:
+                with open(args.compare, "r", encoding="utf-8") as f:
+                    baseline_data = json.load(f)
+                print_comparison(baseline_data, current_data)
 
 if __name__ == "__main__":
     main()

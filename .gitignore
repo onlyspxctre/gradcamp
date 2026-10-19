@@ -28,4 +28,10 @@ htmlcov/
 
 # Benchmark baselines and metrics outputs
 baseline*.json
+baseline*.log
+baseline*.txt
 benchmark*.json
+benchmark*.log
+benchmark*.txt
+*.log
+

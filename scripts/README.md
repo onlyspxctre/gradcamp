@@ -91,13 +91,23 @@ Run the benchmark on your baseline branch and save the output to a JSON file:
 ```bash
 python3 scripts/benchmark.py --runs 10 --save baseline.json
 ```
-The saved file records raw runs, percentile distributions (mean, p50, p95, min, max, std dev), and the current git commit.
+- The saved JSON file records raw runs, percentile distributions (mean, p50, p95, min, max, std dev), and git commit metadata.
+- **Automatic stdout logging**: By default, whenever `--save <path>` is used, the benchmark automatically saves the clean terminal output log (with ANSI escape codes stripped) to `<path>.log` (e.g., `baseline.log`) in the same folder.
+- **Disabling log saving**: Pass `--no-log` if you only want the JSON file without creating a log file:
+  ```bash
+  python3 scripts/benchmark.py --runs 10 --save baseline.json --no-log
+  ```
+- **Choosing `.txt` extension**: Pass `--log-ext txt` to create `baseline.txt` instead of `baseline.log`:
+  ```bash
+  python3 scripts/benchmark.py --runs 10 --save baseline.json --log-ext txt
+  ```
 
 ### Step 2: Benchmark Optimizations & Compare
 After making changes (e.g. switching to `BRPOP`, pre-compiling test harnesses, or consolidating microVMs), run with `--compare`:
 ```bash
 python3 scripts/benchmark.py --runs 10 --compare baseline.json
 ```
+
 
 This prints a side-by-side comparison table showing absolute deltas and speedup multipliers:
 
@@ -152,8 +162,12 @@ python3 scripts/benchmark.py --file path/to/my_solution.c
 | `--url` | | `http://localhost:3000` | Backend API base URL. |
 | `--test-type` | | `valid` | Built-in test payload: `valid`, `wrong`, or `compile_error`. |
 | `--file` | | `None` | Custom source file to benchmark instead of built-in payloads. |
-| `--save` | `-s` | `None` | Path to save JSON benchmark baseline. |
+| `--save` | `-s` | `None` | Path to save JSON benchmark baseline. Automatically writes stdout log to matching `.log` or `.txt`. |
 | `--compare` | `-c` | `None` | Path to a previous JSON baseline for comparative analysis. |
+| `--no-log` | | `False` | Disable automatic stdout logging to file when `--save` is used. |
+| `--log-ext` | | `log` | Extension for stdout log file (`log` or `txt`, default: `log`). |
+| `--log-file` | | `None` | Explicit path to save stdout log file (independent of `--save`). |
+
 
 ---
 
