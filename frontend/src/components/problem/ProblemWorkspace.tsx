@@ -1,8 +1,15 @@
-import { useState, useEffect, useRef, type CSSProperties } from "react"
+import {
+    useState,
+    useEffect,
+    useRef,
+    useCallback,
+    type CSSProperties,
+} from "react"
 import { ProblemLeftPane } from "./ProblemLeftPane"
 import { CodeEditorPane } from "./CodeEditorPane"
 import { useWorkspace } from "@/context/WorkspaceContext"
 import { GripVertical } from "lucide-react"
+import { usePaneResize } from "@/hooks/usePaneResize"
 
 export function ProblemWorkspace() {
     const {
@@ -29,44 +36,28 @@ export function ProblemWorkspace() {
         "description"
     )
 
-    // Split-pane width state (percentage)
-    const [splitPercent, setSplitPercent] = useState<number>(45)
-    const isDraggingRef = useRef<boolean>(false)
     const containerRef = useRef<HTMLDivElement>(null)
-
-    // Draggable Divider Mouse Handlers
-    const handleMouseDown = (e: React.MouseEvent) => {
-        e.preventDefault()
-        isDraggingRef.current = true
-        document.body.style.cursor = "col-resize"
-        document.body.style.userSelect = "none"
-    }
-
-    useEffect(() => {
-        const handleMouseMove = (e: MouseEvent) => {
-            if (!isDraggingRef.current || !containerRef.current) return
-            const rect = containerRef.current.getBoundingClientRect()
-            const newWidth = ((e.clientX - rect.left) / rect.width) * 100
-            if (newWidth >= 25 && newWidth <= 75) {
-                setSplitPercent(newWidth)
-            }
-        }
-
-        const handleMouseUp = () => {
-            if (isDraggingRef.current) {
-                isDraggingRef.current = false
-                document.body.style.cursor = ""
-                document.body.style.userSelect = ""
-            }
-        }
-
-        window.addEventListener("mousemove", handleMouseMove)
-        window.addEventListener("mouseup", handleMouseUp)
-        return () => {
-            window.removeEventListener("mousemove", handleMouseMove)
-            window.removeEventListener("mouseup", handleMouseUp)
-        }
+    const applySplit = useCallback((value: number) => {
+        containerRef.current?.style.setProperty("--split", `${value}%`)
     }, [])
+    const getSplitBounds = useCallback(
+        () => ({
+            min: 25,
+            max: 75,
+            unitsPerPixel: 100 / (containerRef.current?.clientWidth || 1),
+        }),
+        []
+    )
+    const {
+        value: splitPercent,
+        setValue: setSplitPercent,
+        separatorProps,
+    } = usePaneResize({
+        axis: "x",
+        initialValue: 45,
+        getBounds: getSplitBounds,
+        applyValue: applySplit,
+    })
 
     // Global keyboard shortcuts (Ctrl+Enter to submit, Ctrl+' to run)
     useEffect(() => {
@@ -128,14 +119,13 @@ export function ProblemWorkspace() {
 
                 {/* Draggable Divider (Desktop) */}
                 <div
-                    onMouseDown={handleMouseDown}
-                    className="group hidden w-4 shrink-0 cursor-col-resize items-center justify-center rounded-md transition-colors select-none hover:bg-primary/10 active:bg-primary/15 md:flex"
+                    {...separatorProps}
+                    className="group hidden w-4 shrink-0 cursor-col-resize touch-none items-center justify-center rounded-md transition-colors select-none hover:bg-primary/10 active:bg-primary/15 md:flex"
                     role="separator"
                     aria-label="Resize description and editor panes"
                     aria-orientation="vertical"
                     aria-valuemin={25}
                     aria-valuemax={75}
-                    aria-valuenow={Math.round(splitPercent)}
                     tabIndex={0}
                     onKeyDown={(event) => {
                         if (
@@ -143,15 +133,9 @@ export function ProblemWorkspace() {
                             event.key === "ArrowRight"
                         ) {
                             event.preventDefault()
-                            setSplitPercent((value) =>
-                                Math.min(
-                                    75,
-                                    Math.max(
-                                        25,
-                                        value +
-                                            (event.key === "ArrowLeft" ? -2 : 2)
-                                    )
-                                )
+                            setSplitPercent(
+                                splitPercent +
+                                    (event.key === "ArrowLeft" ? -2 : 2)
                             )
                         }
                     }}

@@ -1,4 +1,10 @@
-import { useState, useRef, useEffect, useCallback } from "react"
+import {
+    useState,
+    useRef,
+    useEffect,
+    useCallback,
+    type CSSProperties,
+} from "react"
 import Editor, { type OnMount } from "@monaco-editor/react"
 import {
     Play,
@@ -19,6 +25,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { useTheme } from "@/components/theme-provider"
 import { configureEditorThemes } from "@/lib/editorThemes"
+import { usePaneResize } from "@/hooks/usePaneResize"
 import type {
     Problem,
     Submission,
@@ -94,15 +101,42 @@ export function CodeEditorPane({
     const [customInput, setCustomInput] = useState<string>("")
     const [isCustomCase, setIsCustomCase] = useState<boolean>(false)
 
-    const [consoleBodyHeight, setConsoleBodyHeight] = useState<number>(180)
-    const [isDraggingConsole, setIsDraggingConsole] = useState<boolean>(false)
-    const isDraggingConsoleRef = useRef<boolean>(false)
-    const startDragYRef = useRef<number>(0)
-    const startHeightRef = useRef<number>(180)
-
     const editorRef = useRef<Parameters<OnMount>[0] | null>(null)
     const editorContainerRef = useRef<HTMLDivElement>(null)
     const paneContainerRef = useRef<HTMLDivElement>(null)
+    const consoleBodyRef = useRef<HTMLDivElement>(null)
+    const lastEditorSizeRef = useRef({ width: 0, height: 0 })
+
+    const applyConsoleHeight = useCallback((value: number) => {
+        paneContainerRef.current?.style.setProperty(
+            "--console-height",
+            `${value}px`
+        )
+    }, [])
+    const getConsoleBounds = useCallback(
+        () => ({
+            min: 60,
+            // Keep the editor usable and all console actions inside the pane.
+            max: Math.max(
+                60,
+                (consoleBodyRef.current?.clientHeight ?? 180) +
+                    (editorContainerRef.current?.clientHeight ?? 140) -
+                    140
+            ),
+            unitsPerPixel: -1,
+        }),
+        []
+    )
+    const {
+        value: consoleBodyHeight,
+        setValue: setConsoleBodyHeight,
+        separatorProps: consoleSeparatorProps,
+    } = usePaneResize({
+        axis: "y",
+        initialValue: 180,
+        getBounds: getConsoleBounds,
+        applyValue: applyConsoleHeight,
+    })
 
     const handleCopy = () => {
         navigator.clipboard.writeText(code)
@@ -115,90 +149,52 @@ export function CodeEditorPane({
 
     const handleEditorDidMount: OnMount = (editor) => {
         editorRef.current = editor
-        requestAnimationFrame(() => {
-            editor.layout()
-        })
+        const container = editorContainerRef.current
+        if (!container) return
+        const size = {
+            width: container.clientWidth,
+            height: container.clientHeight,
+        }
+        lastEditorSizeRef.current = size
+        editor.layout(size)
     }
 
-    // Re-layout when console height changes or fullscreen toggles
+    // One layout owner: observe the actual editor box and pass known dimensions.
+    // No per-move effects, timers, extra animation frames, or Monaco auto-layout.
     useEffect(() => {
-        if (editorRef.current) {
-            editorRef.current.layout()
-        }
-    }, [consoleBodyHeight, consoleTab, isFullscreen])
-
-    // Re-layout during and after the 200ms open/close transition
-    useEffect(() => {
-        if (!editorRef.current) return
-        const timer = setTimeout(() => {
-            editorRef.current?.layout()
-        }, 210)
-        return () => clearTimeout(timer)
-    }, [isConsoleOpen])
-
-    // ResizeObserver on the container ensures Monaco fills the exact available box
-    useEffect(() => {
-        if (!editorContainerRef.current) return
-        const ro = new ResizeObserver(() => {
-            if (editorRef.current) {
-                editorRef.current.layout()
+        const container = editorContainerRef.current
+        if (!container) return
+        const observer = new ResizeObserver(([entry]) => {
+            if (!editorRef.current) return
+            const size = {
+                width: Math.floor(entry.contentRect.width),
+                height: Math.floor(entry.contentRect.height),
             }
+            const previous = lastEditorSizeRef.current
+            if (
+                size.width <= 0 ||
+                size.height <= 0 ||
+                (size.width === previous.width &&
+                    size.height === previous.height)
+            )
+                return
+            lastEditorSizeRef.current = size
+            editorRef.current.layout(size)
         })
-        ro.observe(editorContainerRef.current)
-        return () => ro.disconnect()
+        observer.observe(container)
+        return () => observer.disconnect()
     }, [])
-
-    // Vertical Console Resizer Handlers
-    const handleConsoleResizeStart = (e: React.MouseEvent) => {
-        e.preventDefault()
-        isDraggingConsoleRef.current = true
-        setIsDraggingConsole(true)
-        startDragYRef.current = e.clientY
-        startHeightRef.current = consoleBodyHeight
-        document.body.style.cursor = "row-resize"
-        document.body.style.userSelect = "none"
-    }
-
-    const handleMouseMove = useCallback((e: MouseEvent) => {
-        if (!isDraggingConsoleRef.current || !paneContainerRef.current) return
-        const deltaY = startDragYRef.current - e.clientY // Dragging UP increases height
-        const paneTotalHeight = paneContainerRef.current.clientHeight
-        const newHeight = Math.min(
-            Math.max(startHeightRef.current + deltaY, 60),
-            paneTotalHeight * 0.7
-        )
-        setConsoleBodyHeight(newHeight)
-        requestAnimationFrame(() => {
-            editorRef.current?.layout()
-        })
-    }, [])
-
-    const handleMouseUp = useCallback(() => {
-        if (isDraggingConsoleRef.current) {
-            isDraggingConsoleRef.current = false
-            setIsDraggingConsole(false)
-            document.body.style.cursor = ""
-            document.body.style.userSelect = ""
-            requestAnimationFrame(() => {
-                editorRef.current?.layout()
-            })
-        }
-    }, [])
-
-    useEffect(() => {
-        window.addEventListener("mousemove", handleMouseMove)
-        window.addEventListener("mouseup", handleMouseUp)
-        return () => {
-            window.removeEventListener("mousemove", handleMouseMove)
-            window.removeEventListener("mouseup", handleMouseUp)
-        }
-    }, [handleMouseMove, handleMouseUp])
 
     return (
         <ContextMenu>
             <ContextMenuTrigger asChild>
                 <div
                     ref={paneContainerRef}
+                    style={
+                        {
+                            "--console-height": `${consoleBodyHeight}px`,
+                        } as CSSProperties
+                    }
                     className={`flex h-full min-h-0 w-full flex-col overflow-hidden bg-card ${
                         isFullscreen ? "fixed inset-0 z-50" : "relative"
                     }`}
@@ -321,10 +317,6 @@ export function CodeEditorPane({
                         className="relative min-h-[140px] w-full flex-1 overflow-hidden bg-[var(--editor-background)]"
                     >
                         <div className="absolute inset-0 h-full w-full">
-                            {/* Prevent Monaco from capturing mouse events while resizing */}
-                            {isDraggingConsole && (
-                                <div className="absolute inset-0 z-30 cursor-row-resize" />
-                            )}
                             <Editor
                                 height="100%"
                                 width="100%"
@@ -341,7 +333,7 @@ export function CodeEditorPane({
                                     fontLigatures: true,
                                     tabSize: 4,
                                     minimap: { enabled: false },
-                                    automaticLayout: true,
+                                    automaticLayout: false,
                                     scrollBeyondLastLine: false,
                                     wordWrap: "on",
                                     lineNumbers: "on",
@@ -370,9 +362,26 @@ export function CodeEditorPane({
                     {/* Draggable Vertical Handle between Editor and Console */}
                     {isConsoleOpen && (
                         <div
-                            onMouseDown={handleConsoleResizeStart}
-                            className="group flex h-2 w-full cursor-row-resize items-center justify-center border-t border-border/80 bg-muted/20 transition-colors select-none hover:bg-primary/15 active:bg-primary/20"
-                            title="Drag vertically to resize console"
+                            {...consoleSeparatorProps}
+                            className="group flex h-2 w-full shrink-0 cursor-row-resize touch-none items-center justify-center border-t border-border/80 bg-muted/20 transition-colors select-none hover:bg-primary/15 active:bg-primary/20"
+                            role="separator"
+                            aria-label="Resize editor and console panes"
+                            aria-orientation="horizontal"
+                            aria-valuemin={60}
+                            tabIndex={0}
+                            onKeyDown={(event) => {
+                                if (
+                                    event.key === "ArrowUp" ||
+                                    event.key === "ArrowDown"
+                                ) {
+                                    event.preventDefault()
+                                    setConsoleBodyHeight(
+                                        consoleBodyHeight +
+                                            (event.key === "ArrowUp" ? 20 : -20)
+                                    )
+                                }
+                            }}
+                            title="Drag or use arrow keys to resize console"
                         >
                             <GripHorizontal className="size-3 text-muted-foreground/60 transition-colors group-hover:text-primary" />
                         </div>
@@ -471,16 +480,13 @@ export function CodeEditorPane({
 
                         {/* Collapsible Console Content Body */}
                         <div
+                            ref={consoleBodyRef}
                             style={{
                                 height: isConsoleOpen
-                                    ? `${consoleBodyHeight}px`
+                                    ? "var(--console-height)"
                                     : "0px",
                             }}
-                            className={`overflow-hidden bg-muted/10 ${
-                                isDraggingConsole
-                                    ? "transition-none select-none"
-                                    : "transition-[height] duration-200 ease-in-out"
-                            }`}
+                            className="console-body overflow-hidden bg-muted/10 transition-[height] duration-200 ease-in-out"
                         >
                             <div className="h-full space-y-3 overflow-y-auto p-3.5 text-xs">
                                 {/* TAB: TESTCASE */}

@@ -1,4 +1,5 @@
 import * as React from "react"
+import { flushSync } from "react-dom"
 
 type Theme = "dark" | "light" | "system"
 type ResolvedTheme = "dark" | "light"
@@ -17,6 +18,7 @@ type ThemeProviderState = {
 }
 
 const COLOR_SCHEME_QUERY = "(prefers-color-scheme: dark)"
+const REDUCED_MOTION_QUERY = "(prefers-reduced-motion: reduce)"
 const THEME_VALUES: Theme[] = ["dark", "light", "system"]
 
 const ThemeProviderContext = React.createContext<
@@ -105,19 +107,24 @@ export function ThemeProvider({
     )
     const resolvedTheme = theme === "system" ? systemTheme : theme
 
-    const setTheme = React.useCallback(
-        (nextTheme: Theme) => {
-            localStorage.setItem(storageKey, nextTheme)
-            setThemeState(nextTheme)
-        },
-        [storageKey]
-    )
+    const themeRef = React.useRef(theme)
+    const transitionRef = React.useRef<ViewTransition | null>(null)
+    const changeVersionRef = React.useRef(0)
+
+    const cancelThemeTransition = React.useCallback(() => {
+        changeVersionRef.current += 1
+        transitionRef.current?.skipTransition()
+        transitionRef.current = null
+        document.documentElement.removeAttribute("data-theme-transition")
+    }, [])
 
     const applyTheme = React.useCallback(
         (nextTheme: Theme) => {
             const root = document.documentElement
             const resolvedTheme =
                 nextTheme === "system" ? getSystemTheme() : nextTheme
+            if (root.classList.contains(resolvedTheme)) return
+
             const restoreTransitions = disableTransitionOnChange
                 ? disableTransitionsTemporarily()
                 : null
@@ -132,24 +139,67 @@ export function ThemeProvider({
         [disableTransitionOnChange]
     )
 
+    const setTheme = React.useCallback(
+        (nextTheme: Theme) => {
+            const root = document.documentElement
+            const nextResolvedTheme =
+                nextTheme === "system" ? getSystemTheme() : nextTheme
+            const schemeChanged = !root.classList.contains(nextResolvedTheme)
+
+            // A second request must supersede even a not-yet-captured transition.
+            cancelThemeTransition()
+            const version = changeVersionRef.current
+            themeRef.current = nextTheme
+            localStorage.setItem(storageKey, nextTheme)
+
+            const update = () => {
+                if (version !== changeVersionRef.current) return
+                // Capture the root palette, React controls, and Monaco in one frame.
+                flushSync(() => {
+                    applyTheme(nextTheme)
+                    setThemeState(nextTheme)
+                })
+            }
+
+            if (
+                !schemeChanged ||
+                !document.startViewTransition ||
+                window.matchMedia(REDUCED_MOTION_QUERY).matches
+            ) {
+                update()
+                return
+            }
+
+            root.dataset.themeTransition = nextResolvedTheme
+            try {
+                const transition = document.startViewTransition(update)
+                transitionRef.current = transition
+                const cleanup = () => {
+                    if (transitionRef.current !== transition) return
+                    transitionRef.current = null
+                    root.removeAttribute("data-theme-transition")
+                }
+                // Skips (rapid toggles, hidden tabs) reject ready, but still run update.
+                void transition.ready.catch(() => {})
+                void transition.finished.then(cleanup, cleanup)
+            } catch {
+                root.removeAttribute("data-theme-transition")
+                update()
+            }
+        },
+        [storageKey, applyTheme, cancelThemeTransition]
+    )
+
     React.useEffect(() => {
-        applyTheme(theme)
-
-        if (theme !== "system") {
-            return undefined
+        themeRef.current = theme
+        // Initial appearance and OS changes are immediate, not animated.
+        if (!document.documentElement.classList.contains(resolvedTheme)) {
+            cancelThemeTransition()
+            applyTheme(theme)
         }
+    }, [theme, resolvedTheme, applyTheme, cancelThemeTransition])
 
-        const mediaQuery = window.matchMedia(COLOR_SCHEME_QUERY)
-        const handleChange = () => {
-            applyTheme("system")
-        }
-
-        mediaQuery.addEventListener("change", handleChange)
-
-        return () => {
-            mediaQuery.removeEventListener("change", handleChange)
-        }
-    }, [theme, applyTheme])
+    React.useEffect(() => cancelThemeTransition, [cancelThemeTransition])
 
     React.useEffect(() => {
         const handleKeyDown = (event: KeyboardEvent) => {
@@ -169,19 +219,11 @@ export function ThemeProvider({
                 return
             }
 
-            setThemeState((currentTheme) => {
-                const nextTheme =
-                    currentTheme === "dark"
-                        ? "light"
-                        : currentTheme === "light"
-                          ? "dark"
-                          : getSystemTheme() === "dark"
-                            ? "light"
-                            : "dark"
-
-                localStorage.setItem(storageKey, nextTheme)
-                return nextTheme
-            })
+            const currentTheme =
+                themeRef.current === "system"
+                    ? getSystemTheme()
+                    : themeRef.current
+            setTheme(currentTheme === "dark" ? "light" : "dark")
         }
 
         window.addEventListener("keydown", handleKeyDown)
@@ -189,7 +231,7 @@ export function ThemeProvider({
         return () => {
             window.removeEventListener("keydown", handleKeyDown)
         }
-    }, [storageKey])
+    }, [setTheme])
 
     React.useEffect(() => {
         const handleStorageChange = (event: StorageEvent) => {
@@ -201,12 +243,12 @@ export function ThemeProvider({
                 return
             }
 
-            if (isTheme(event.newValue)) {
-                setThemeState(event.newValue)
-                return
-            }
-
-            setThemeState(defaultTheme)
+            cancelThemeTransition()
+            const nextTheme = isTheme(event.newValue)
+                ? event.newValue
+                : defaultTheme
+            themeRef.current = nextTheme
+            setThemeState(nextTheme)
         }
 
         window.addEventListener("storage", handleStorageChange)
@@ -214,7 +256,7 @@ export function ThemeProvider({
         return () => {
             window.removeEventListener("storage", handleStorageChange)
         }
-    }, [defaultTheme, storageKey])
+    }, [defaultTheme, storageKey, cancelThemeTransition])
 
     const value = React.useMemo(
         () => ({
