@@ -1,6 +1,9 @@
 import { useState } from "react"
-import type { ActiveNavTab, Problem } from "@/types"
+import type { ActiveNavTab, Assignment } from "@/types"
 import { MOCK_PROBLEMS } from "@/data/mockProblems"
+import { ASSIGNMENTS } from "@/data/assignments"
+import { LearningProvider } from "@/context/LearningContext"
+import { PointersAssignmentView } from "@/components/learning/PointersAssignmentView"
 import { Navbar } from "@/components/layout/Navbar"
 import { ProblemWorkspace } from "@/components/problem/ProblemWorkspace"
 import { ProblemListView } from "@/components/catalog/ProblemListView"
@@ -10,9 +13,13 @@ import { WorkspaceProvider, useWorkspace } from "@/context/WorkspaceContext"
 function AppContent() {
     const [activeNavTab, setActiveNavTab] = useState<ActiveNavTab>("workspace")
     const { setCurrentProblem, submissions } = useWorkspace()
+    const [activeAssignment, setActiveAssignment] = useState<Assignment>(
+        MOCK_PROBLEMS[0]
+    )
 
-    const handleSelectProblem = (problem: Problem) => {
-        setCurrentProblem(problem)
+    const handleSelectProblem = (assignment: Assignment) => {
+        setActiveAssignment(assignment)
+        if (assignment.kind === "code") setCurrentProblem(assignment)
         setActiveNavTab("workspace")
     }
 
@@ -33,11 +40,21 @@ function AppContent() {
                 tabIndex={-1}
                 className="isolate flex min-h-0 flex-1 flex-col overflow-hidden"
             >
-                {activeNavTab === "workspace" && <ProblemWorkspace />}
+                {activeNavTab === "workspace" &&
+                    (activeAssignment.kind === "code" ? (
+                        <ProblemWorkspace />
+                    ) : (
+                        <PointersAssignmentView
+                            key={activeAssignment.id}
+                            assignment={activeAssignment}
+                            onSelectAssignment={handleSelectProblem}
+                            onBack={() => setActiveNavTab("assignments")}
+                        />
+                    ))}
 
                 {activeNavTab === "assignments" && (
                     <ProblemListView
-                        problems={MOCK_PROBLEMS}
+                        problems={ASSIGNMENTS}
                         submissions={submissions}
                         onSelectProblem={handleSelectProblem}
                     />
@@ -58,7 +75,9 @@ function AppContent() {
 export function App() {
     return (
         <WorkspaceProvider>
-            <AppContent />
+            <LearningProvider>
+                <AppContent />
+            </LearningProvider>
         </WorkspaceProvider>
     )
 }

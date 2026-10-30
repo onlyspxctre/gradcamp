@@ -1,6 +1,7 @@
 import type { Problem } from "@/types"
 
 export const DEMO_PROBLEM: Problem = {
+    kind: "code",
     id: "1",
     numericId: 1,
     title: "Add Two Integers",

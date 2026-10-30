@@ -1,12 +1,15 @@
 import { useState } from "react"
-import type { Problem, Difficulty, Submission } from "@/types"
+import type { Assignment, Difficulty, Submission } from "@/types"
+import { ASSIGNMENT_KIND_LABELS } from "@/data/assignments"
+import { useLearning } from "@/context/LearningContext"
+import { isQuizComplete } from "@/lib/learningProgress"
 import { DifficultyBadge } from "@/components/common/StatusBadges"
 import { Search, CheckCircle2, Clock, ArrowUpRight } from "lucide-react"
 
 interface ProblemListViewProps {
-    problems: Problem[]
+    problems: Assignment[]
     submissions: Submission[]
-    onSelectProblem: (problem: Problem) => void
+    onSelectProblem: (problem: Assignment) => void
 }
 
 export function ProblemListView({
@@ -14,6 +17,10 @@ export function ProblemListView({
     submissions,
     onSelectProblem,
 }: ProblemListViewProps) {
+    const { progress } = useLearning()
+    const [selectedKind, setSelectedKind] = useState<
+        Assignment["kind"] | "all"
+    >("all")
     const [searchQuery, setSearchQuery] = useState("")
     const [selectedDifficulty, setSelectedDifficulty] = useState<
         Difficulty | "All"
@@ -25,12 +32,28 @@ export function ProblemListView({
             problem.numericId.toString().includes(searchQuery)
         return (
             matchesSearch &&
+            (selectedKind === "all" || problem.kind === selectedKind) &&
             (selectedDifficulty === "All" ||
                 problem.difficulty === selectedDifficulty)
         )
     })
 
     const getProblemStatus = (problemId: string) => {
+        const assignment = problems.find((item) => item.id === problemId)
+        if (assignment?.kind === "lecture")
+            return progress.lecture.completed
+                ? "solved"
+                : progress.lecture.viewed.length > 0 ||
+                    progress.lecture.step > 0 ||
+                    progress.lecture.chapter > 0
+                  ? "attempted"
+                  : "todo"
+        if (assignment?.kind === "quiz")
+            return isQuizComplete(progress)
+                ? "solved"
+                : Object.keys(progress.quiz.answers).length > 0
+                  ? "attempted"
+                  : "todo"
         const subs = submissions.filter((s) => s.problemId === problemId)
         if (subs.some((s) => s.status === "Accepted")) return "solved"
         if (subs.length > 0) return "attempted"
@@ -133,6 +156,26 @@ export function ProblemListView({
                     </div>
                 </div>
 
+                <div
+                    className="mb-5 flex flex-wrap items-center gap-1"
+                    role="group"
+                    aria-label="Filter by assignment type"
+                >
+                    {(["all", "code", "lecture", "quiz"] as const).map(
+                        (kind) => (
+                            <button
+                                key={kind}
+                                onClick={() => setSelectedKind(kind)}
+                                className="filter-button"
+                                aria-pressed={selectedKind === kind}
+                            >
+                                {kind === "all"
+                                    ? "All types"
+                                    : ASSIGNMENT_KIND_LABELS[kind]}
+                            </button>
+                        )
+                    )}
+                </div>
                 <div className="overflow-hidden rounded-lg border border-border bg-card/80">
                     <table className="data-table">
                         <thead>
@@ -154,7 +197,7 @@ export function ProblemListView({
                                         className="py-14! text-center text-muted-foreground"
                                     >
                                         No assignments match. Try another search
-                                        or difficulty.
+                                        or filter.
                                     </td>
                                 </tr>
                             ) : (
@@ -177,6 +220,13 @@ export function ProblemListView({
                                                     {problem.title}
                                                     <ArrowUpRight className="size-3.5 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
                                                 </button>
+                                                <span className="mt-1.5 inline-block rounded-sm bg-secondary/70 px-1.5 py-0.5 text-[10px] font-normal text-secondary-foreground">
+                                                    {
+                                                        ASSIGNMENT_KIND_LABELS[
+                                                            problem.kind
+                                                        ]
+                                                    }
+                                                </span>
                                             </td>
                                             <td className="hidden text-xs text-muted-foreground sm:table-cell">
                                                 {problem.category}

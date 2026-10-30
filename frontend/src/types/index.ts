@@ -32,13 +32,26 @@ export interface SupportedLanguage {
     version: string
 }
 
-export interface Problem {
+export interface AssignmentBase {
     id: string
     numericId: number
     title: string
     slug: string
     difficulty: Difficulty
     category: string
+}
+
+export interface LearningAssignment extends AssignmentBase {
+    kind: "lecture" | "quiz"
+    contentId: "pointers"
+    description: string
+    estimatedMinutes: number
+}
+
+export type Assignment = Problem | LearningAssignment
+
+export interface Problem extends AssignmentBase {
+    kind: "code"
     description: string
     examples: ProblemExample[]
     constraints: string[]
