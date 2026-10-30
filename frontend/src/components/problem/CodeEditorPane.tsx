@@ -18,6 +18,7 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useTheme } from "@/components/theme-provider"
+import { configureEditorThemes } from "@/lib/editorThemes"
 import type {
     Problem,
     Submission,
@@ -82,7 +83,7 @@ export function CodeEditorPane({
     isConsoleOpen,
     setIsConsoleOpen,
 }: CodeEditorPaneProps) {
-    const { theme } = useTheme()
+    const { resolvedTheme } = useTheme()
     const [selectedLanguage, setSelectedLanguage] = useState<SupportedLanguage>(
         SUPPORTED_LANGUAGES[0]
     )
@@ -198,12 +199,12 @@ export function CodeEditorPane({
             <ContextMenuTrigger asChild>
                 <div
                     ref={paneContainerRef}
-                    className={`flex h-full w-full flex-col overflow-hidden bg-background ${
+                    className={`flex h-full min-h-0 w-full flex-col overflow-hidden bg-card ${
                         isFullscreen ? "fixed inset-0 z-50" : "relative"
                     }`}
                 >
                     {/* Top Editor Toolbar */}
-                    <div className="flex shrink-0 items-center justify-between border-b border-border bg-muted/30 px-3 py-1.5 text-xs">
+                    <div className="pane-toolbar flex-wrap gap-y-1 px-3 py-1.5">
                         {/* Language Selector */}
                         <div className="flex items-center gap-2">
                             <Select
@@ -217,7 +218,8 @@ export function CodeEditorPane({
                             >
                                 <SelectTrigger
                                     size="sm"
-                                    className="h-7 min-w-[136px] font-medium"
+                                    className="h-7 min-w-[112px] border-transparent bg-transparent font-medium shadow-none"
+                                    aria-label="Programming language"
                                 >
                                     <SelectValue placeholder="Select Language" />
                                 </SelectTrigger>
@@ -238,7 +240,7 @@ export function CodeEditorPane({
                         </div>
 
                         {/* Toolbar Controls */}
-                        <div className="flex items-center gap-1">
+                        <div className="flex items-center gap-0.5">
                             {/* Font size control */}
                             <Select
                                 value={fontSize.toString()}
@@ -248,7 +250,8 @@ export function CodeEditorPane({
                             >
                                 <SelectTrigger
                                     size="sm"
-                                    className="h-7 w-[72px] font-medium"
+                                    className="h-7 w-[64px] border-transparent bg-transparent font-medium shadow-none"
+                                    aria-label="Editor font size"
                                     title="Editor Font Size"
                                 >
                                     <SelectValue />
@@ -282,7 +285,7 @@ export function CodeEditorPane({
                                 className="text-muted-foreground hover:text-foreground"
                             >
                                 {isCopied ? (
-                                    <Check className="size-3 text-emerald-500" />
+                                    <Check className="size-3 text-success" />
                                 ) : (
                                     <Copy className="size-3" />
                                 )}
@@ -315,7 +318,7 @@ export function CodeEditorPane({
                     {/* Monaco Code Editor Area */}
                     <div
                         ref={editorContainerRef}
-                        className="relative min-h-[140px] w-full flex-1 overflow-hidden bg-background"
+                        className="relative min-h-[140px] w-full flex-1 overflow-hidden bg-[var(--editor-background)]"
                     >
                         <div className="absolute inset-0 h-full w-full">
                             {/* Prevent Monaco from capturing mouse events while resizing */}
@@ -329,11 +332,12 @@ export function CodeEditorPane({
                                 value={code}
                                 onChange={(val) => setCode(val ?? "")}
                                 onMount={handleEditorDidMount}
-                                theme={theme === "dark" ? "vs-dark" : "light"}
+                                beforeMount={configureEditorThemes}
+                                theme={`gradcamp-${resolvedTheme}`}
                                 options={{
                                     fontSize,
                                     fontFamily:
-                                        "'Geist Mono', 'Fira Code', Menlo, Monaco, 'Courier New', monospace",
+                                        "'Geist Mono Variable', Menlo, Monaco, monospace",
                                     fontLigatures: true,
                                     tabSize: 4,
                                     minimap: { enabled: false },
@@ -343,7 +347,8 @@ export function CodeEditorPane({
                                     lineNumbers: "on",
                                     folding: true,
                                     bracketPairColorization: { enabled: true },
-                                    padding: { top: 12, bottom: 12 },
+                                    padding: { top: 22, bottom: 16 },
+                                    lineHeight: 25,
                                     renderLineHighlight: "all",
                                     cursorBlinking: "smooth",
                                     overviewRulerBorder: false,
@@ -366,7 +371,7 @@ export function CodeEditorPane({
                     {isConsoleOpen && (
                         <div
                             onMouseDown={handleConsoleResizeStart}
-                            className="group flex h-2 w-full cursor-row-resize items-center justify-center border-t border-border/80 bg-muted/40 transition-colors select-none hover:bg-primary/20 active:bg-primary/30"
+                            className="group flex h-2 w-full cursor-row-resize items-center justify-center border-t border-border/80 bg-muted/20 transition-colors select-none hover:bg-primary/15 active:bg-primary/20"
                             title="Drag vertically to resize console"
                         >
                             <GripHorizontal className="size-3 text-muted-foreground/60 transition-colors group-hover:text-primary" />
@@ -374,9 +379,9 @@ export function CodeEditorPane({
                     )}
 
                     {/* Bottom Console Drawer */}
-                    <div className="flex shrink-0 flex-col border-t border-border bg-background">
+                    <div className="flex shrink-0 flex-col border-t border-border bg-card">
                         {/* Console Header Bar */}
-                        <div className="flex shrink-0 items-center justify-between border-b border-border/80 bg-muted/20 px-3 py-1.5 text-xs">
+                        <div className="flex min-h-11 shrink-0 items-center overflow-x-auto border-b border-border/80 px-3 py-1.5 text-[11px]">
                             <div className="flex items-center gap-1">
                                 <button
                                     onClick={() =>
@@ -389,8 +394,10 @@ export function CodeEditorPane({
                                             : "Expand console"
                                     }
                                 >
-                                    <Terminal className="size-3.5 text-blue-500" />
-                                    <span>Console</span>
+                                    <Terminal className="size-3.5 text-primary" />
+                                    <span className="hidden lg:inline">
+                                        Console
+                                    </span>
                                     {isConsoleOpen ? (
                                         <ChevronDown className="size-3" />
                                     ) : (
@@ -410,7 +417,7 @@ export function CodeEditorPane({
                                                     : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
                                             }`}
                                         >
-                                            Testcase
+                                            Test cases
                                         </button>
 
                                         <button
@@ -428,8 +435,8 @@ export function CodeEditorPane({
                                                 <span
                                                     className={`size-1.5 rounded-full ${
                                                         runResult.passed
-                                                            ? "bg-emerald-500"
-                                                            : "bg-rose-500"
+                                                            ? "bg-success"
+                                                            : "bg-destructive"
                                                     }`}
                                                 />
                                             )}
@@ -445,56 +452,20 @@ export function CodeEditorPane({
                                                     : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
                                             }`}
                                         >
-                                            <span>Submission Result</span>
+                                            <span>Submission</span>
                                             {activeSubmission && (
                                                 <span
                                                     className={`size-1.5 rounded-full ${
                                                         activeSubmission.status ===
                                                         "Accepted"
-                                                            ? "bg-emerald-500"
-                                                            : "bg-rose-500"
+                                                            ? "bg-success"
+                                                            : "bg-destructive"
                                                     }`}
                                                 />
                                             )}
                                         </button>
                                     </div>
                                 )}
-                            </div>
-
-                            {/* Action Buttons: Run & Submit */}
-                            <div className="flex items-center gap-2">
-                                <Button
-                                    variant="outline"
-                                    size="xs"
-                                    onClick={onRunCode}
-                                    disabled={isRunning || isSubmitting}
-                                    className="gap-1.5 text-xs font-semibold"
-                                >
-                                    <Play
-                                        className={`size-3 fill-emerald-500 text-emerald-500 ${
-                                            isRunning ? "animate-pulse" : ""
-                                        }`}
-                                    />
-                                    <span>
-                                        {isRunning ? "Running..." : "Run"}
-                                    </span>
-                                </Button>
-
-                                <Button
-                                    size="xs"
-                                    onClick={onSubmitCode}
-                                    disabled={isRunning || isSubmitting}
-                                    className="gap-1.5 bg-emerald-600 text-xs font-semibold text-white hover:bg-emerald-700"
-                                >
-                                    <Send
-                                        className={`size-3 ${isSubmitting ? "animate-bounce" : ""}`}
-                                    />
-                                    <span>
-                                        {isSubmitting
-                                            ? "Submitting..."
-                                            : "Submit"}
-                                    </span>
-                                </Button>
                             </div>
                         </div>
 
@@ -586,7 +557,7 @@ export function CodeEditorPane({
                                                     <span className="text-[11px] font-semibold text-muted-foreground">
                                                         Expected Output:
                                                     </span>
-                                                    <pre className="rounded border border-border/70 bg-muted/40 p-2 font-mono text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                                                    <pre className="rounded border border-border/70 bg-muted/40 p-2 font-mono text-xs font-medium text-success">
                                                         {
                                                             currentCase.expectedOutput
                                                         }
@@ -612,14 +583,14 @@ export function CodeEditorPane({
                                                 <div className="flex items-center justify-between">
                                                     <div className="flex items-center gap-2">
                                                         {runResult.passed ? (
-                                                            <div className="flex items-center gap-1.5 font-bold text-emerald-600 dark:text-emerald-400">
+                                                            <div className="flex items-center gap-1.5 font-medium text-success">
                                                                 <CheckCircle2 className="size-4" />
                                                                 <span>
                                                                     Accepted
                                                                 </span>
                                                             </div>
                                                         ) : (
-                                                            <div className="flex items-center gap-1.5 font-bold text-rose-600 dark:text-rose-400">
+                                                            <div className="flex items-center gap-1.5 font-medium text-destructive">
                                                                 <XCircle className="size-4" />
                                                                 <span>
                                                                     Wrong Answer
@@ -647,7 +618,7 @@ export function CodeEditorPane({
                                                         <span className="font-sans text-[11px] font-semibold text-muted-foreground">
                                                             Expected:
                                                         </span>
-                                                        <pre className="overflow-x-auto rounded border border-border bg-muted/40 p-2 text-emerald-600 dark:text-emerald-400">
+                                                        <pre className="overflow-x-auto rounded border border-border bg-muted/40 p-2 text-success">
                                                             {runResult.expected ??
                                                                 "--"}
                                                         </pre>
@@ -668,7 +639,7 @@ export function CodeEditorPane({
                                     <div className="space-y-3">
                                         {isSubmitting ? (
                                             <div className="flex flex-col items-center justify-center gap-2 py-6 text-center">
-                                                <Loader2 className="size-6 animate-spin text-emerald-500" />
+                                                <Loader2 className="size-6 animate-spin text-primary" />
                                                 <span className="text-sm font-semibold text-foreground">
                                                     Submitting to Backend Worker
                                                 </span>
@@ -738,9 +709,9 @@ export function CodeEditorPane({
                                                                                     className="flex items-center gap-2 rounded border border-border/60 bg-muted/30 p-2 text-xs"
                                                                                 >
                                                                                     {t.passed ? (
-                                                                                        <CheckCircle2 className="size-3.5 shrink-0 text-emerald-500" />
+                                                                                        <CheckCircle2 className="size-3.5 shrink-0 text-success" />
                                                                                     ) : (
-                                                                                        <XCircle className="size-3.5 shrink-0 text-rose-500" />
+                                                                                        <XCircle className="size-3.5 shrink-0 text-destructive" />
                                                                                     )}
                                                                                     <span className="truncate font-medium">
                                                                                         {
@@ -758,14 +729,41 @@ export function CodeEditorPane({
                                             </div>
                                         ) : (
                                             <div className="py-4 text-center text-muted-foreground">
-                                                Click "Submit" to send your
-                                                solution to the backend
-                                                autograder worker.
+                                                Submit your solution to check it
+                                                against the test cases.
                                             </div>
                                         )}
                                     </div>
                                 )}
                             </div>
+                        </div>
+                    </div>
+                    <div className="flex shrink-0 items-center justify-between gap-3 border-t border-border bg-card px-4 py-3">
+                        <span className="font-mono text-[10px] text-muted-foreground">
+                            {selectedLanguage.name}{" "}
+                            <span className="mx-1 opacity-50">/</span>{" "}
+                            {code.split("\n").length} lines
+                        </span>
+                        <div className="flex items-center gap-2">
+                            <Button
+                                variant="outline"
+                                onClick={onRunCode}
+                                disabled={isRunning || isSubmitting}
+                                className="gap-2 text-xs"
+                            >
+                                <Play
+                                    className={`size-3 text-primary ${isRunning ? "animate-pulse" : ""}`}
+                                />
+                                {isRunning ? "Running…" : "Run code"}
+                            </Button>
+                            <Button
+                                onClick={onSubmitCode}
+                                disabled={isRunning || isSubmitting}
+                                className="gap-2 px-4 text-xs"
+                            >
+                                <Send className="size-3" />
+                                {isSubmitting ? "Submitting…" : "Submit"}
+                            </Button>
                         </div>
                     </div>
                 </div>
@@ -775,7 +773,7 @@ export function CodeEditorPane({
                     onClick={onRunCode}
                     disabled={isRunning || isSubmitting}
                 >
-                    <Play className="mr-2 size-3.5 fill-emerald-500 text-emerald-500" />
+                    <Play className="mr-2 size-3.5 text-primary" />
                     <span>Run Code</span>
                     <ContextMenuShortcut>Ctrl+'</ContextMenuShortcut>
                 </ContextMenuItem>
@@ -783,7 +781,7 @@ export function CodeEditorPane({
                     onClick={onSubmitCode}
                     disabled={isRunning || isSubmitting}
                 >
-                    <Send className="mr-2 size-3.5 text-emerald-500" />
+                    <Send className="mr-2 size-3.5 text-primary" />
                     <span>Submit Solution</span>
                     <ContextMenuShortcut>Ctrl+↵</ContextMenuShortcut>
                 </ContextMenuItem>
@@ -810,7 +808,7 @@ export function CodeEditorPane({
                 <ContextMenuItem
                     onClick={() => setIsConsoleOpen(!isConsoleOpen)}
                 >
-                    <Terminal className="mr-2 size-3.5 text-blue-500" />
+                    <Terminal className="mr-2 size-3.5 text-primary" />
                     <span>
                         {isConsoleOpen ? "Collapse Console" : "Open Console"}
                     </span>

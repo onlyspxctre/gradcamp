@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, type CSSProperties } from "react"
 import { ProblemLeftPane } from "./ProblemLeftPane"
 import { CodeEditorPane } from "./CodeEditorPane"
 import { useWorkspace } from "@/context/WorkspaceContext"
@@ -85,75 +85,113 @@ export function ProblemWorkspace() {
     }, [submitCode, runCode])
 
     return (
-        <div
-            ref={containerRef}
-            className="flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden bg-background md:flex-row"
+        <section
+            aria-label="Coding workspace"
+            className="page-enter flex min-h-0 flex-1 flex-col overflow-y-auto px-3 pb-3 md:overflow-hidden md:px-5 md:pb-5"
         >
-            {/* Left Pane (Description, Submissions) */}
+            <div className="flex shrink-0 items-center justify-between gap-4 px-1 py-5 md:px-2 md:py-6">
+                <div>
+                    <h1 className="editorial-title text-[26px] md:text-[30px]">
+                        Workspace
+                    </h1>
+                </div>
+                <div className="hidden items-center gap-3 text-xs text-muted-foreground sm:flex">
+                    <span
+                        className="h-px w-8 bg-primary/35"
+                        aria-hidden="true"
+                    />
+                    <span>{currentProblem.category}</span>
+                    <span className="font-mono text-[10px]">
+                        / {String(currentProblem.numericId).padStart(2, "0")}
+                    </span>
+                </div>
+            </div>
             <div
-                style={{ width: `${splitPercent}%` }}
-                className="hidden h-full min-h-0 min-w-0 shrink-0 flex-col overflow-hidden md:flex"
+                ref={containerRef}
+                style={{ "--split": `${splitPercent}%` } as CSSProperties}
+                className="flex min-h-0 flex-1 flex-col gap-3 md:flex-row md:gap-0"
             >
-                <ProblemLeftPane
-                    problem={currentProblem}
-                    submissions={submissions}
-                    activeTab={leftTab}
-                    setActiveTab={setLeftTab}
-                    onSelectSubmission={(sub) => {
-                        setActiveSubmission(sub)
-                        setConsoleTab("submission")
-                        setIsConsoleOpen(true)
+                {/* Reading pane */}
+                <div className="workspace-panel h-[480px] shrink-0 md:h-full md:w-[var(--split)]">
+                    <ProblemLeftPane
+                        problem={currentProblem}
+                        submissions={submissions}
+                        activeTab={leftTab}
+                        setActiveTab={setLeftTab}
+                        onSelectSubmission={(sub) => {
+                            setActiveSubmission(sub)
+                            setConsoleTab("submission")
+                            setIsConsoleOpen(true)
+                        }}
+                    />
+                </div>
+
+                {/* Draggable Divider (Desktop) */}
+                <div
+                    onMouseDown={handleMouseDown}
+                    className="group hidden w-4 shrink-0 cursor-col-resize items-center justify-center rounded-md transition-colors select-none hover:bg-primary/10 active:bg-primary/15 md:flex"
+                    role="separator"
+                    aria-label="Resize description and editor panes"
+                    aria-orientation="vertical"
+                    aria-valuemin={25}
+                    aria-valuemax={75}
+                    aria-valuenow={Math.round(splitPercent)}
+                    tabIndex={0}
+                    onKeyDown={(event) => {
+                        if (
+                            event.key === "ArrowLeft" ||
+                            event.key === "ArrowRight"
+                        ) {
+                            event.preventDefault()
+                            setSplitPercent((value) =>
+                                Math.min(
+                                    75,
+                                    Math.max(
+                                        25,
+                                        value +
+                                            (event.key === "ArrowLeft" ? -2 : 2)
+                                    )
+                                )
+                            )
+                        }
                     }}
-                />
-            </div>
+                    title="Drag or use arrow keys to resize split panes"
+                >
+                    <GripVertical className="size-3 text-muted-foreground/60 transition-colors group-hover:text-primary" />
+                </div>
 
-            {/* Draggable Divider (Desktop) */}
-            <div
-                onMouseDown={handleMouseDown}
-                className="group hidden w-2.5 shrink-0 cursor-col-resize items-center justify-center border-x border-border/60 bg-muted/40 transition-colors select-none hover:bg-primary/20 active:bg-primary/30 md:flex"
-                title="Drag to resize split panes"
-            >
-                <GripVertical className="size-3 text-muted-foreground/60 transition-colors group-hover:text-primary" />
+                {/* Editor and test console */}
+                <div className="workspace-panel h-[560px] shrink-0 md:h-full md:flex-1">
+                    <CodeEditorPane
+                        problem={currentProblem}
+                        code={code}
+                        setCode={setCode}
+                        onRunCode={runCode}
+                        onSubmitCode={submitCode}
+                        onResetCode={resetCode}
+                        isRunning={isRunning}
+                        isSubmitting={isSubmitting}
+                        activeSubmission={activeSubmission}
+                        submissionStateDetail={submissionStateDetail}
+                        runResult={runResult}
+                        consoleTab={consoleTab}
+                        setConsoleTab={setConsoleTab}
+                        isConsoleOpen={isConsoleOpen}
+                        setIsConsoleOpen={setIsConsoleOpen}
+                    />
+                </div>
             </div>
-
-            {/* Mobile Stack: Show Left pane */}
-            <div className="flex h-1/2 min-h-0 flex-1 flex-col overflow-hidden border-b border-border md:hidden">
-                <ProblemLeftPane
-                    problem={currentProblem}
-                    submissions={submissions}
-                    activeTab={leftTab}
-                    setActiveTab={setLeftTab}
-                    onSelectSubmission={(sub) => {
-                        setActiveSubmission(sub)
-                        setConsoleTab("submission")
-                        setIsConsoleOpen(true)
-                    }}
-                />
+            <div className="hidden shrink-0 items-center justify-end px-1 pt-3 text-[10px] text-muted-foreground md:flex">
+                <span className="flex items-center gap-4">
+                    <span>
+                        Run <kbd className="ml-1 font-mono">⌘ / Ctrl + '</kbd>
+                    </span>
+                    <span>
+                        Submit{" "}
+                        <kbd className="ml-1 font-mono">⌘ / Ctrl + Enter</kbd>
+                    </span>
+                </span>
             </div>
-
-            {/* Right Pane (Code Editor & Vertically Resizable Test Console) */}
-            <div
-                style={{ width: `calc(${100 - splitPercent}% - 0.625rem)` }}
-                className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
-            >
-                <CodeEditorPane
-                    problem={currentProblem}
-                    code={code}
-                    setCode={setCode}
-                    onRunCode={runCode}
-                    onSubmitCode={submitCode}
-                    onResetCode={resetCode}
-                    isRunning={isRunning}
-                    isSubmitting={isSubmitting}
-                    activeSubmission={activeSubmission}
-                    submissionStateDetail={submissionStateDetail}
-                    runResult={runResult}
-                    consoleTab={consoleTab}
-                    setConsoleTab={setConsoleTab}
-                    isConsoleOpen={isConsoleOpen}
-                    setIsConsoleOpen={setIsConsoleOpen}
-                />
-            </div>
-        </div>
+        </section>
     )
 }

@@ -38,21 +38,48 @@ export function ProblemLeftPane({
     )
 
     return (
-        <div className="flex h-full flex-col overflow-hidden border-r border-border bg-background select-text">
+        <div className="flex h-full min-h-0 flex-col overflow-hidden bg-card select-text">
             {/* Tab Navigation Header */}
-            <div className="flex shrink-0 items-center gap-1 border-b border-border bg-muted/30 px-3 py-1.5 text-xs">
+            <div
+                className="pane-toolbar justify-start gap-5"
+                role="tablist"
+                aria-label="Assignment details"
+                onKeyDown={(event) => {
+                    if (
+                        !["ArrowLeft", "ArrowRight", "Home", "End"].includes(
+                            event.key
+                        )
+                    )
+                        return
+                    event.preventDefault()
+                    const nextTab =
+                        event.key === "Home"
+                            ? "description"
+                            : event.key === "End"
+                              ? "submissions"
+                              : activeTab === "description"
+                                ? "submissions"
+                                : "description"
+                    setActiveTab(nextTab)
+                    setSelectedSubDetail(null)
+                    event.currentTarget
+                        .querySelector<HTMLButtonElement>(`#${nextTab}-tab`)
+                        ?.focus()
+                }}
+            >
                 <button
                     onClick={() => {
                         setActiveTab("description")
                         setSelectedSubDetail(null)
                     }}
-                    className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 font-medium transition-colors ${
-                        activeTab === "description"
-                            ? "bg-background text-foreground shadow-xs"
-                            : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
-                    }`}
+                    className="pane-tab"
+                    role="tab"
+                    aria-selected={activeTab === "description"}
+                    tabIndex={activeTab === "description" ? 0 : -1}
+                    aria-controls="assignment-detail-panel"
+                    id="description-tab"
                 >
-                    <FileText className="size-3.5 text-blue-500" />
+                    <FileText className="size-3.5 text-primary" />
                     <span>Description</span>
                 </button>
 
@@ -61,13 +88,14 @@ export function ProblemLeftPane({
                         setActiveTab("submissions")
                         setSelectedSubDetail(null)
                     }}
-                    className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 font-medium transition-colors ${
-                        activeTab === "submissions"
-                            ? "bg-background text-foreground shadow-xs"
-                            : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
-                    }`}
+                    className="pane-tab"
+                    role="tab"
+                    aria-selected={activeTab === "submissions"}
+                    tabIndex={activeTab === "submissions" ? 0 : -1}
+                    aria-controls="assignment-detail-panel"
+                    id="submissions-tab"
                 >
-                    <History className="size-3.5 text-emerald-500" />
+                    <History className="size-3.5" />
                     <span>Submissions</span>
                     {problemSubmissions.length > 0 && (
                         <span className="py-0.2 ml-0.5 rounded-full bg-muted px-1.5 text-[10px] font-semibold text-muted-foreground">
@@ -78,27 +106,35 @@ export function ProblemLeftPane({
             </div>
 
             {/* Pane Content Area */}
-            <div className="flex-1 space-y-6 overflow-y-auto p-4 md:p-6">
+            <div
+                id="assignment-detail-panel"
+                role="tabpanel"
+                aria-labelledby={`${activeTab}-tab`}
+                className="reading-pane min-h-0 flex-1 overflow-y-auto"
+            >
                 {/* TAB 1: DESCRIPTION */}
                 {activeTab === "description" && (
-                    <div className="space-y-6">
-                        {/* Title & Stats */}
-                        <div className="space-y-2 border-b border-border/70 pb-4">
-                            <div className="flex flex-wrap items-center justify-between gap-2">
-                                <h1 className="text-xl font-bold tracking-tight text-foreground md:text-2xl">
-                                    {problem.numericId}. {problem.title}
-                                </h1>
+                    <div className="space-y-8">
+                        <div className="space-y-4">
+                            <div className="flex items-center justify-between gap-2">
+                                <span className="eyebrow">
+                                    Assignment{" "}
+                                    {String(problem.numericId).padStart(2, "0")}
+                                </span>
                                 <DifficultyBadge
                                     difficulty={problem.difficulty}
                                 />
                             </div>
-                            <span className="text-xs font-medium text-muted-foreground">
-                                Assignment Category: {problem.category}
-                            </span>
+                            <h2 className="editorial-title text-[30px] leading-tight lg:text-[36px]">
+                                {problem.title}
+                            </h2>
+                            <p className="text-xs text-muted-foreground">
+                                {problem.category}
+                            </p>
                         </div>
 
                         {/* Description Text */}
-                        <div className="space-y-3 text-sm leading-relaxed text-foreground/90">
+                        <div className="space-y-3 text-[14px] leading-[1.85] text-foreground/90">
                             {problem.description
                                 .split("\n\n")
                                 .map((paragraph, idx) => (
@@ -106,7 +142,18 @@ export function ProblemLeftPane({
                                         key={idx}
                                         className="whitespace-pre-line"
                                     >
-                                        {paragraph}
+                                        {paragraph
+                                            .split(/(`[^`]+`)/g)
+                                            .map((part, partIndex) =>
+                                                part.startsWith("`") &&
+                                                part.endsWith("`") ? (
+                                                    <code key={partIndex}>
+                                                        {part.slice(1, -1)}
+                                                    </code>
+                                                ) : (
+                                                    part
+                                                )
+                                            )}
                                     </p>
                                 ))}
                         </div>
@@ -116,14 +163,9 @@ export function ProblemLeftPane({
 
                         {/* Examples Section */}
                         <div className="space-y-4 pt-2">
-                            <h2 className="text-xs font-bold tracking-wider text-muted-foreground uppercase">
-                                Examples
-                            </h2>
+                            <h3 className="eyebrow">Examples</h3>
                             {problem.examples.map((example) => (
-                                <div
-                                    key={example.id}
-                                    className="space-y-2 rounded-lg border border-border bg-muted/20 p-3.5 font-mono text-xs"
-                                >
+                                <div key={example.id} className="example-block">
                                     <div className="font-sans text-xs font-semibold text-foreground">
                                         Example {example.id}
                                     </div>
@@ -132,7 +174,7 @@ export function ProblemLeftPane({
                                             <span className="min-w-16 text-muted-foreground">
                                                 Input:
                                             </span>
-                                            <span className="rounded bg-muted/60 px-1.5 py-0.5 text-foreground">
+                                            <span className="px-1.5 py-0.5 text-foreground">
                                                 {example.input}
                                             </span>
                                         </div>
@@ -140,7 +182,7 @@ export function ProblemLeftPane({
                                             <span className="min-w-16 text-muted-foreground">
                                                 Output:
                                             </span>
-                                            <span className="rounded bg-muted/60 px-1.5 py-0.5 font-semibold text-emerald-600 dark:text-emerald-400">
+                                            <span className="px-1.5 py-0.5 font-medium text-success">
                                                 {example.output}
                                             </span>
                                         </div>
@@ -161,9 +203,7 @@ export function ProblemLeftPane({
 
                         {/* Constraints */}
                         <div className="space-y-2 pt-2">
-                            <h2 className="text-xs font-bold tracking-wider text-muted-foreground uppercase">
-                                Constraints
-                            </h2>
+                            <h3 className="eyebrow">Constraints</h3>
                             <ul className="list-inside list-disc space-y-1.5 font-mono text-xs text-foreground/90">
                                 {problem.constraints.map((constraint, idx) => (
                                     <li key={idx} className="leading-normal">
@@ -245,9 +285,9 @@ export function ProblemLeftPane({
                                                         >
                                                             <div className="flex items-center gap-2">
                                                                 {t.passed ? (
-                                                                    <CheckCircle2 className="size-3.5 text-emerald-500" />
+                                                                    <CheckCircle2 className="size-3.5 text-success" />
                                                                 ) : (
-                                                                    <XCircle className="size-3.5 text-rose-500" />
+                                                                    <XCircle className="size-3.5 text-destructive" />
                                                                 )}
                                                                 <span className="font-medium text-foreground">
                                                                     {t.name}
@@ -282,8 +322,7 @@ export function ProblemLeftPane({
                                     No submissions yet
                                 </p>
                                 <p className="max-w-xs text-xs text-muted-foreground">
-                                    Write your solution in C and click "Submit"
-                                    to send it to the backend worker queue.
+                                    Submit a solution to see its results here.
                                 </p>
                             </div>
                         ) : (

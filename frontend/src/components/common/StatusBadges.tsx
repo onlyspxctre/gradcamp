@@ -15,14 +15,13 @@ export function DifficultyBadge({
     className?: string
 }) {
     const styles: Record<Difficulty, string> = {
-        Easy: "text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border-emerald-500/20",
-        Medium: "text-amber-600 dark:text-amber-400 bg-amber-500/10 border-amber-500/20",
-        Hard: "text-rose-600 dark:text-rose-400 bg-rose-500/10 border-rose-500/20",
+        Easy: "text-success bg-success/8",
+        Medium: "text-warning bg-warning/8",
+        Hard: "text-destructive bg-destructive/8",
     }
-
     return (
         <span
-            className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${styles[difficulty]} ${className}`}
+            className={`inline-flex items-center rounded-sm px-2 py-1 text-[10px] font-medium ${styles[difficulty]} ${className}`}
         >
             {difficulty}
         </span>
@@ -36,54 +35,34 @@ export function SubmissionStatusBadge({
     status: SubmissionStatus
     className?: string
 }) {
-    switch (status) {
-        case "Accepted":
-            return (
-                <span
-                    className={`inline-flex items-center gap-1.5 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-0.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400 ${className}`}
-                >
-                    <CheckCircle2 className="size-3.5" />
-                    Accepted
-                </span>
-            )
-        case "Wrong Answer":
-            return (
-                <span
-                    className={`inline-flex items-center gap-1.5 rounded-full border border-rose-500/20 bg-rose-500/10 px-2.5 py-0.5 text-xs font-semibold text-rose-600 dark:text-rose-400 ${className}`}
-                >
-                    <XCircle className="size-3.5" />
-                    Wrong Answer
-                </span>
-            )
-        case "Time Limit Exceeded":
-        case "Memory Limit Exceeded":
-            return (
-                <span
-                    className={`inline-flex items-center gap-1.5 rounded-full border border-orange-500/20 bg-orange-500/10 px-2.5 py-0.5 text-xs font-semibold text-orange-600 dark:text-orange-400 ${className}`}
-                >
-                    <Clock className="size-3.5" />
-                    {status}
-                </span>
-            )
-        case "Compile Error":
-        case "Runtime Error":
-            return (
-                <span
-                    className={`inline-flex items-center gap-1.5 rounded-full border border-red-500/20 bg-red-500/10 px-2.5 py-0.5 text-xs font-semibold text-red-600 dark:text-red-400 ${className}`}
-                >
-                    <AlertTriangle className="size-3.5" />
-                    {status}
-                </span>
-            )
-        case "Pending":
-        case "In Progress":
-            return (
-                <span
-                    className={`inline-flex animate-pulse items-center gap-1.5 rounded-full border border-blue-500/20 bg-blue-500/10 px-2.5 py-0.5 text-xs font-semibold text-blue-600 dark:text-blue-400 ${className}`}
-                >
-                    <Loader2 className="size-3.5 animate-spin" />
-                    {status}
-                </span>
-            )
-    }
+    const isPending = status === "Pending" || status === "In Progress"
+    const isLimit =
+        status === "Time Limit Exceeded" || status === "Memory Limit Exceeded"
+    const isError = status === "Compile Error" || status === "Runtime Error"
+    const Icon =
+        status === "Accepted"
+            ? CheckCircle2
+            : isPending
+              ? Loader2
+              : isLimit
+                ? Clock
+                : isError
+                  ? AlertTriangle
+                  : XCircle
+    const style =
+        status === "Accepted"
+            ? "bg-success/8 text-success"
+            : isPending
+              ? "bg-primary/8 text-primary"
+              : isLimit
+                ? "bg-warning/8 text-warning"
+                : "bg-destructive/8 text-destructive"
+    return (
+        <span
+            className={`inline-flex items-center gap-1.5 rounded-sm px-2 py-1 text-[11px] font-medium ${style} ${className}`}
+        >
+            <Icon className={`size-3.5 ${isPending ? "animate-spin" : ""}`} />
+            {status}
+        </span>
+    )
 }

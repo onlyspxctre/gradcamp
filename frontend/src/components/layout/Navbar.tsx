@@ -1,16 +1,6 @@
-import {
-    Code2,
-    Play,
-    Send,
-    Sun,
-    Moon,
-    User,
-    BookOpen,
-    History,
-} from "lucide-react"
+import { Code2, Sun, Moon, User, BookOpen, History } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useTheme } from "@/components/theme-provider"
-import { useWorkspace } from "@/context/WorkspaceContext"
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -26,168 +16,115 @@ interface NavbarProps {
     setActiveTab: (tab: ActiveNavTab) => void
 }
 
+const NAV_ITEMS = [
+    { id: "workspace", label: "Workspace", icon: Code2 },
+    { id: "assignments", label: "Assignments", icon: BookOpen },
+    { id: "submissions", label: "Submissions", icon: History },
+] as const
+
 export function Navbar({ activeTab, setActiveTab }: NavbarProps) {
-    const { theme, setTheme } = useTheme()
-    const { runCode, submitCode, isRunning, isSubmitting } = useWorkspace()
+    const { resolvedTheme, setTheme } = useTheme()
+    const toggleTheme = () =>
+        setTheme(resolvedTheme === "dark" ? "light" : "dark")
 
     return (
-        <header className="sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/60">
-            <div className="flex h-13 items-center justify-between px-4 md:px-6">
-                {/* Left Section: Clean Brand & Navigation */}
-                <div className="flex items-center gap-8">
-                    <div
-                        onClick={() => setActiveTab("workspace")}
-                        className="group flex cursor-pointer items-center gap-2.5 transition-opacity select-none hover:opacity-90"
+        <header className="z-40 shrink-0 border-b border-border bg-card/80">
+            <div className="flex flex-wrap items-center justify-between gap-x-6 px-5 md:px-7">
+                <button
+                    onClick={() => setActiveTab("workspace")}
+                    className="flex h-16 items-center gap-2.5 text-foreground"
+                    aria-label="Gradcamp home"
+                >
+                    <svg
+                        viewBox="0 0 36 36"
+                        className="size-8 text-primary"
+                        fill="none"
+                        aria-hidden="true"
                     >
-                        <div className="flex size-8 items-center justify-center rounded-lg bg-primary font-bold text-primary-foreground shadow-xs">
-                            <Code2 className="size-4.5" />
-                        </div>
-                        <span className="text-lg font-bold tracking-tight text-foreground">
-                            Gradcamp
-                        </span>
-                    </div>
+                        <path
+                            d="M5 25.5h26M8 30h20M8 21a10 10 0 0 1 20 0"
+                            stroke="currentColor"
+                            strokeWidth="1.5"
+                            strokeLinecap="round"
+                        />
+                        <path
+                            d="M18 3v4M5.3 8.3l2.8 2.8M30.7 8.3l-2.8 2.8M1 20h4M31 20h4"
+                            stroke="currentColor"
+                            strokeWidth="1.5"
+                            strokeLinecap="round"
+                        />
+                    </svg>
+                    <span className="brand-wordmark">
+                        gradcamp<span className="text-primary">.</span>
+                    </span>
+                </button>
 
-                    <nav className="flex items-center gap-1 text-sm font-medium">
+                <nav
+                    aria-label="Main navigation"
+                    className="order-3 flex w-full items-center md:order-none md:w-auto md:self-stretch"
+                >
+                    {NAV_ITEMS.map(({ id, label }) => (
                         <button
-                            onClick={() => setActiveTab("workspace")}
-                            className={`rounded-md px-3 py-1.5 transition-colors ${
-                                activeTab === "workspace"
-                                    ? "bg-muted font-semibold text-foreground"
-                                    : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-                            }`}
+                            key={id}
+                            onClick={() => setActiveTab(id)}
+                            className="nav-link"
+                            aria-current={activeTab === id ? "page" : undefined}
                         >
-                            Workspace
+                            {label}
                         </button>
-                        <button
-                            onClick={() => setActiveTab("assignments")}
-                            className={`rounded-md px-3 py-1.5 transition-colors ${
-                                activeTab === "assignments"
-                                    ? "bg-muted font-semibold text-foreground"
-                                    : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-                            }`}
-                        >
-                            Assignments
-                        </button>
-                        <button
-                            onClick={() => setActiveTab("submissions")}
-                            className={`rounded-md px-3 py-1.5 transition-colors ${
-                                activeTab === "submissions"
-                                    ? "bg-muted font-semibold text-foreground"
-                                    : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-                            }`}
-                        >
-                            Submissions
-                        </button>
-                    </nav>
-                </div>
+                    ))}
+                </nav>
 
-                {/* Right Section: Actions & Profile */}
-                <div className="flex items-center gap-2.5">
-                    {activeTab === "workspace" && (
-                        <div className="mr-2 flex items-center gap-2">
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={runCode}
-                                disabled={isRunning || isSubmitting}
-                                className="h-8 gap-1.5 text-xs font-semibold"
-                            >
-                                <Play
-                                    className={`size-3 fill-emerald-500 text-emerald-500 ${isRunning ? "animate-pulse" : ""}`}
-                                />
-                                {isRunning ? "Running..." : "Run"}
-                            </Button>
-
-                            <Button
-                                size="sm"
-                                onClick={submitCode}
-                                disabled={isRunning || isSubmitting}
-                                className="h-8 gap-1.5 bg-emerald-600 text-xs font-semibold text-white hover:bg-emerald-700"
-                            >
-                                <Send
-                                    className={`size-3 ${isSubmitting ? "animate-bounce" : ""}`}
-                                />
-                                {isSubmitting ? "Submitting..." : "Submit"}
-                            </Button>
-                        </div>
-                    )}
-
-                    {/* Theme toggle */}
+                <div className="flex items-center gap-3">
                     <Button
                         variant="ghost"
-                        size="icon-sm"
-                        onClick={() =>
-                            setTheme(theme === "dark" ? "light" : "dark")
-                        }
-                        title={`Toggle Theme (current: ${theme})`}
-                        className="text-muted-foreground hover:text-foreground"
+                        size="icon"
+                        onClick={toggleTheme}
+                        aria-label={`Switch to ${resolvedTheme === "dark" ? "light" : "dark"} mode`}
+                        title="Toggle theme (D)"
+                        className="text-muted-foreground"
                     >
-                        {theme === "dark" ? (
+                        {resolvedTheme === "dark" ? (
                             <Sun className="size-4" />
                         ) : (
                             <Moon className="size-4" />
                         )}
                     </Button>
-
-                    {/* User profile dropdown */}
-                    <div className="flex items-center border-border/80 pl-1">
-                        <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                                <button
-                                    className="flex size-7 cursor-pointer items-center justify-center rounded-full bg-gradient-to-tr from-primary/80 to-primary text-xs font-medium text-primary-foreground shadow-xs ring-1 ring-border transition-all hover:ring-2 focus:outline-none"
-                                    title="User Menu"
-                                >
-                                    <User className="size-3.5" />
-                                </button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent
-                                align="end"
-                                className="w-48 text-xs"
+                    <span className="h-4 w-px bg-border" aria-hidden="true" />
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <button
+                                className="flex size-8 items-center justify-center rounded-full border border-border text-muted-foreground transition-colors hover:border-primary hover:text-primary"
+                                aria-label="Open account menu"
                             >
-                                <DropdownMenuLabel className="font-semibold text-foreground">
-                                    Gradcamp Account
-                                </DropdownMenuLabel>
-                                <DropdownMenuSeparator />
+                                <User className="size-4" />
+                            </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-48">
+                            <DropdownMenuLabel>Gradcamp</DropdownMenuLabel>
+                            <DropdownMenuSeparator />
+                            {NAV_ITEMS.map(({ id, label, icon: Icon }) => (
                                 <DropdownMenuItem
-                                    onClick={() => setActiveTab("workspace")}
+                                    key={id}
+                                    onClick={() => setActiveTab(id)}
                                 >
-                                    <Code2 className="mr-2 size-3.5" />
-                                    <span>Workspace</span>
+                                    <Icon className="size-4" />
+                                    {label}
                                 </DropdownMenuItem>
-                                <DropdownMenuItem
-                                    onClick={() => setActiveTab("assignments")}
-                                >
-                                    <BookOpen className="mr-2 size-3.5" />
-                                    <span>Assignments</span>
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                    onClick={() => setActiveTab("submissions")}
-                                >
-                                    <History className="mr-2 size-3.5" />
-                                    <span>Submissions</span>
-                                </DropdownMenuItem>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem
-                                    onClick={() =>
-                                        setTheme(
-                                            theme === "dark" ? "light" : "dark"
-                                        )
-                                    }
-                                >
-                                    {theme === "dark" ? (
-                                        <Sun className="mr-2 size-3.5" />
-                                    ) : (
-                                        <Moon className="mr-2 size-3.5" />
-                                    )}
-                                    <span>
-                                        {theme === "dark"
-                                            ? "Switch to Light Mode"
-                                            : "Switch to Dark Mode"}
-                                    </span>
-                                </DropdownMenuItem>
-                            </DropdownMenuContent>
-                        </DropdownMenu>
-                    </div>
+                            ))}
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem onClick={toggleTheme}>
+                                {resolvedTheme === "dark" ? (
+                                    <Sun className="size-4" />
+                                ) : (
+                                    <Moon className="size-4" />
+                                )}
+                                {resolvedTheme === "dark"
+                                    ? "Light appearance"
+                                    : "Dark appearance"}
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
                 </div>
             </div>
         </header>
