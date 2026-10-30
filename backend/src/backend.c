@@ -167,7 +167,7 @@ void on_fetch(fio_http_s *h) {
         }
         redisReply *err_res = gradcamp_redis_run_cmd("HGET job:%b error", res_buf.buf, res_buf.len);
         if (err_res && err_res->type == REDIS_REPLY_STRING) {
-            yyjson_mut_obj_add_str(json, json_root, "error", err_res->str);
+            yyjson_mut_obj_add_strcpy(json, json_root, "error", err_res->str);
         }
         if (err_res) freeReplyObject(err_res);
     } else {
