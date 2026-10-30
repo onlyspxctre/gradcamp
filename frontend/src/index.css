@@ -197,18 +197,6 @@
     .collection-hero {
         @apply relative mb-10 flex flex-wrap items-end justify-between gap-8 border-b border-border pb-9;
     }
-    .collection-hero::before {
-        content: "";
-        position: absolute;
-        inset: -3.5rem -2rem 0 30%;
-        pointer-events: none;
-        background: radial-gradient(
-            ellipse at 70% 20%,
-            var(--wash),
-            transparent 68%
-        );
-        z-index: -1;
-    }
     .filter-button {
         @apply rounded-md px-3 py-2 text-xs text-muted-foreground transition-colors hover:bg-secondary/70 hover:text-foreground;
     }
