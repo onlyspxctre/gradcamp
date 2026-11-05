@@ -1,18 +1,12 @@
 import { useState } from "react"
-import {
-    FileText,
-    History,
-    Code2,
-    ChevronRight,
-    CheckCircle2,
-    XCircle,
-} from "lucide-react"
+import { FileText, History, Code2, ChevronRight } from "lucide-react"
 import type { Problem, ProblemLeftTab, Submission } from "@/types"
 import {
     DifficultyBadge,
     SubmissionStatusBadge,
 } from "@/components/common/StatusBadges"
 import { Button } from "@/components/ui/button"
+import { SubmissionResult } from "@/components/submissions/SubmissionResult"
 import { AddTwoIntegersVisualizer } from "./AddTwoIntegersVisualizer"
 
 interface ProblemLeftPaneProps {
@@ -230,17 +224,10 @@ export function ProblemLeftPane({
                         </div>
 
                         {selectedSubDetail ? (
-                            /* Detailed view for a single submission */
-                            <div className="space-y-4 rounded-lg border border-border bg-card p-4 text-xs">
-                                <div className="flex items-center justify-between border-b border-border/80 pb-3">
-                                    <div className="flex items-center gap-2">
-                                        <SubmissionStatusBadge
-                                            status={selectedSubDetail.status}
-                                        />
-                                        <span className="font-mono font-semibold text-foreground">
-                                            {selectedSubDetail.language}
-                                        </span>
-                                    </div>
+                            <SubmissionResult
+                                submission={selectedSubDetail}
+                                variant="history"
+                                headerAction={
                                     <Button
                                         variant="ghost"
                                         size="xs"
@@ -250,71 +237,8 @@ export function ProblemLeftPane({
                                     >
                                         Back to list
                                     </Button>
-                                </div>
-
-                                <div className="text-xs text-muted-foreground">
-                                    Job ID:{" "}
-                                    <span className="font-mono text-foreground">
-                                        {selectedSubDetail.id}
-                                    </span>{" "}
-                                    • {selectedSubDetail.timestamp}
-                                </div>
-
-                                {selectedSubDetail.compileError && (
-                                    <div className="rounded border border-destructive/20 bg-destructive/10 p-3 font-mono text-[11px] whitespace-pre-wrap text-destructive">
-                                        {selectedSubDetail.compileError}
-                                    </div>
-                                )}
-
-                                {selectedSubDetail.testResults &&
-                                    selectedSubDetail.testResults.length >
-                                        0 && (
-                                        <div className="space-y-2">
-                                            <span className="block font-bold text-foreground">
-                                                Worker Test Results (
-                                                {selectedSubDetail.testsPassed}/
-                                                {selectedSubDetail.totalTests}{" "}
-                                                passed)
-                                            </span>
-                                            <div className="space-y-1.5">
-                                                {selectedSubDetail.testResults.map(
-                                                    (t, idx) => (
-                                                        <div
-                                                            key={idx}
-                                                            className="flex items-center justify-between rounded border border-border/60 bg-muted/20 p-2"
-                                                        >
-                                                            <div className="flex items-center gap-2">
-                                                                {t.passed ? (
-                                                                    <CheckCircle2 className="size-3.5 text-success" />
-                                                                ) : (
-                                                                    <XCircle className="size-3.5 text-destructive" />
-                                                                )}
-                                                                <span className="font-medium text-foreground">
-                                                                    {t.name}
-                                                                </span>
-                                                            </div>
-                                                            <span className="font-mono text-[10px] text-muted-foreground">
-                                                                {t.passed
-                                                                    ? "PASSED"
-                                                                    : "FAILED"}
-                                                            </span>
-                                                        </div>
-                                                    )
-                                                )}
-                                            </div>
-                                        </div>
-                                    )}
-
-                                {/* Submitted Code snapshot */}
-                                <div className="space-y-1.5">
-                                    <span className="block font-bold text-foreground">
-                                        Submitted Code:
-                                    </span>
-                                    <pre className="max-h-48 overflow-y-auto rounded bg-muted/50 p-2.5 font-mono text-[11px]">
-                                        {selectedSubDetail.code}
-                                    </pre>
-                                </div>
-                            </div>
+                                }
+                            />
                         ) : problemSubmissions.length === 0 ? (
                             <div className="flex flex-col items-center justify-center space-y-2 rounded-lg border border-dashed border-border bg-muted/10 p-8 text-center">
                                 <Code2 className="size-8 text-muted-foreground/50" />

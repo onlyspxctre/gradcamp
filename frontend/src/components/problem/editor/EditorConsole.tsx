@@ -1,15 +1,13 @@
 import { useCallback, useRef, type CSSProperties, type RefObject } from "react"
 import {
-    CheckCircle2,
     ChevronDown,
     ChevronUp,
     GripHorizontal,
     Loader2,
     Terminal,
-    XCircle,
 } from "lucide-react"
 import { usePaneResize } from "@/hooks/usePaneResize"
-import { SubmissionStatusBadge } from "@/components/common/StatusBadges"
+import { SubmissionResult } from "@/components/submissions/SubmissionResult"
 import type { ConsoleTab, Submission, TestCase } from "@/types"
 import { TestCasesPanel } from "./TestCasesPanel"
 
@@ -171,75 +169,7 @@ export function EditorConsole({
                                         </span>
                                     </div>
                                 ) : submission ? (
-                                    <div className="space-y-3">
-                                        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/80 pb-2">
-                                            <div className="flex items-center gap-2">
-                                                <SubmissionStatusBadge
-                                                    status={submission.status}
-                                                    className="px-3 py-1 text-sm"
-                                                />
-                                                <span className="font-mono text-xs text-muted-foreground">
-                                                    {submission.language}
-                                                </span>
-                                            </div>
-                                            <span className="font-mono text-xs text-muted-foreground">
-                                                Job ID: {submission.id}
-                                            </span>
-                                        </div>
-
-                                        {submission.compileError ? (
-                                            <div className="rounded border border-destructive/20 bg-destructive/10 p-3 font-mono text-xs whitespace-pre-wrap text-destructive">
-                                                {submission.compileError}
-                                            </div>
-                                        ) : (
-                                            <>
-                                                {submission.testResults &&
-                                                    submission.testResults
-                                                        .length > 0 && (
-                                                        <div className="space-y-1.5 pt-1">
-                                                            <span className="block text-xs font-semibold text-foreground">
-                                                                Worker Test
-                                                                Matrix (
-                                                                {
-                                                                    submission.testsPassed
-                                                                }
-                                                                /
-                                                                {
-                                                                    submission.totalTests
-                                                                }{" "}
-                                                                passed)
-                                                            </span>
-                                                            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                                                                {submission.testResults.map(
-                                                                    (
-                                                                        t,
-                                                                        idx
-                                                                    ) => (
-                                                                        <div
-                                                                            key={
-                                                                                idx
-                                                                            }
-                                                                            className="flex items-center gap-2 rounded border border-border/60 bg-muted/30 p-2 text-xs"
-                                                                        >
-                                                                            {t.passed ? (
-                                                                                <CheckCircle2 className="size-3.5 shrink-0 text-success" />
-                                                                            ) : (
-                                                                                <XCircle className="size-3.5 shrink-0 text-destructive" />
-                                                                            )}
-                                                                            <span className="truncate font-medium">
-                                                                                {
-                                                                                    t.name
-                                                                                }
-                                                                            </span>
-                                                                        </div>
-                                                                    )
-                                                                )}
-                                                            </div>
-                                                        </div>
-                                                    )}
-                                            </>
-                                        )}
-                                    </div>
+                                    <SubmissionResult submission={submission} />
                                 ) : (
                                     <div className="py-4 text-center text-muted-foreground">
                                         Submit your solution to check it against

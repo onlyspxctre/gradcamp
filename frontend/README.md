@@ -53,6 +53,7 @@ Use **Submit** (or **Ctrl/Cmd + Enter**) to evaluate a code solution against the
 - `src/components/problem/editor/EditorToolbar.tsx` and `EditorContextMenu.tsx` render controls using the same action callbacks.
 - `src/components/problem/editor/CodeEditor.tsx` owns Monaco configuration, theme integration, and its single resize observer.
 - `src/components/problem/editor/EditorConsole.tsx` owns console resizing and tab presentation. `TestCasesPanel.tsx` retains example selection and custom input while tabs change or the console is collapsed.
+- `src/components/submissions/SubmissionResult.tsx` is the shared result renderer for the console and `ProblemLeftPane.tsx`. Its history variant also shows the timestamp, submitted code snapshot, and Back to list action. Submission data and selection remain with the existing workspace/history owners; the shared renderer does not fetch or manage submissions.
 
 ## Assignment types
 

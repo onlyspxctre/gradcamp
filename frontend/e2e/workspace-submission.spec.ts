@@ -87,22 +87,64 @@ for (const scenario of [
             finishGrading()
         }
 
+        const consoleResult = workspace
+            .locator(".console-body")
+            .getByRole("region", { name: "Submission result" })
         await expect(
-            workspace.getByText(scenario.status, { exact: true })
+            consoleResult.getByText(scenario.status, { exact: true })
         ).toBeVisible()
         await expect(submit).toBeEnabled()
-        if (scenario.status === "Compile Error") {
+
+        await workspace.getByRole("tab", { name: /^Submissions/ }).click()
+        const detailsPanel = workspace.getByRole("tabpanel")
+        await detailsPanel.getByText(scenario.status, { exact: true }).click()
+        const historyResult = detailsPanel.getByRole("region", {
+            name: "Submission result",
+        })
+        for (const result of [consoleResult, historyResult]) {
             await expect(
-                workspace.getByText("Compiler diagnostic", { exact: true })
+                result.getByText(scenario.status, { exact: true })
             ).toBeVisible()
-        } else {
-            await expect(
-                workspace.getByText("First test", { exact: true })
-            ).toBeVisible()
-            await expect(
-                workspace.getByText("Second test", { exact: true })
-            ).toBeVisible()
+            if (scenario.status === "Compile Error") {
+                await expect(
+                    result.getByText("Compiler diagnostic", { exact: true })
+                ).toBeVisible()
+            } else {
+                await expect(
+                    result.getByText("First test", { exact: true })
+                ).toBeVisible()
+                await expect(
+                    result.getByText("Second test", { exact: true })
+                ).toBeVisible()
+            }
         }
+        if (scenario.status !== "Compile Error") {
+            const passed = scenario.status === "Accepted" ? 2 : 1
+            await expect(
+                consoleResult.getByText(
+                    `Worker Test Matrix (${passed}/2 passed)`
+                )
+            ).toBeVisible()
+            await expect(
+                historyResult.getByText(
+                    `Worker Test Results (${passed}/2 passed)`
+                )
+            ).toBeVisible()
+            await expect(
+                historyResult.getByText("PASSED", { exact: true })
+            ).toHaveCount(passed)
+            await expect(
+                historyResult.getByText("FAILED", { exact: true })
+            ).toHaveCount(2 - passed)
+        }
+        await expect(historyResult.locator("pre")).toHaveText(uploads[0])
+        await historyResult
+            .getByRole("button", { name: "Back to list" })
+            .click()
+        await expect(historyResult).toHaveCount(0)
+        await expect(
+            consoleResult.getByText(scenario.status, { exact: true })
+        ).toBeVisible()
         await page
             .getByRole("navigation", { name: "Main navigation" })
             .getByRole("button", { name: "Submissions", exact: true })
