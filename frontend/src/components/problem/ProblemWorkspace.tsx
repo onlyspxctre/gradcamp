@@ -17,18 +17,15 @@ export function ProblemWorkspace() {
         code,
         setCode,
         resetCode,
-        isRunning,
         isSubmitting,
         submissions,
         activeSubmission,
         setActiveSubmission,
         submissionStateDetail,
-        runResult,
         consoleTab,
         setConsoleTab,
         isConsoleOpen,
         setIsConsoleOpen,
-        runCode,
         submitCode,
     } = useWorkspace()
 
@@ -59,21 +56,18 @@ export function ProblemWorkspace() {
         applyValue: applySplit,
     })
 
-    // Global keyboard shortcuts (Ctrl+Enter to submit, Ctrl+' to run)
+    // Submit the solution with Ctrl+Enter or Cmd+Enter.
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
             if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
                 e.preventDefault()
                 submitCode()
-            } else if ((e.ctrlKey || e.metaKey) && e.key === "'") {
-                e.preventDefault()
-                runCode()
             }
         }
 
         window.addEventListener("keydown", handleKeyDown)
         return () => window.removeEventListener("keydown", handleKeyDown)
-    }, [submitCode, runCode])
+    }, [submitCode])
 
     return (
         <section
@@ -150,14 +144,11 @@ export function ProblemWorkspace() {
                         problem={currentProblem}
                         code={code}
                         setCode={setCode}
-                        onRunCode={runCode}
                         onSubmitCode={submitCode}
                         onResetCode={resetCode}
-                        isRunning={isRunning}
                         isSubmitting={isSubmitting}
                         activeSubmission={activeSubmission}
                         submissionStateDetail={submissionStateDetail}
-                        runResult={runResult}
                         consoleTab={consoleTab}
                         setConsoleTab={setConsoleTab}
                         isConsoleOpen={isConsoleOpen}
@@ -166,14 +157,9 @@ export function ProblemWorkspace() {
                 </div>
             </div>
             <div className="hidden shrink-0 items-center justify-end px-1 pt-3 text-[10px] text-muted-foreground md:flex">
-                <span className="flex items-center gap-4">
-                    <span>
-                        Run <kbd className="ml-1 font-mono">⌘ / Ctrl + '</kbd>
-                    </span>
-                    <span>
-                        Submit{" "}
-                        <kbd className="ml-1 font-mono">⌘ / Ctrl + Enter</kbd>
-                    </span>
+                <span>
+                    Submit{" "}
+                    <kbd className="ml-1 font-mono">⌘ / Ctrl + Enter</kbd>
                 </span>
             </div>
         </section>

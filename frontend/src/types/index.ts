@@ -88,4 +88,4 @@ export type ActiveNavTab = "workspace" | "assignments" | "submissions"
 
 export type ProblemLeftTab = "description" | "submissions"
 
-export type ConsoleTab = "testcase" | "testresult" | "submission"
+export type ConsoleTab = "testcase" | "submission"

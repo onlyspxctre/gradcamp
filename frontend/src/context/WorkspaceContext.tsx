@@ -3,13 +3,6 @@ import type { Problem, Submission, ConsoleTab } from "@/types"
 import { submitToBackendQueue } from "@/services/judgeService"
 import { MOCK_PROBLEMS } from "@/data/mockProblems"
 
-export interface RunResult {
-    passed: boolean
-    output?: string
-    expected?: string
-    caseName: string
-}
-
 interface WorkspaceContextType {
     currentProblem: Problem
     setCurrentProblem: (problem: Problem) => void
@@ -17,7 +10,6 @@ interface WorkspaceContextType {
     setCode: (code: string) => void
     resetCode: () => void
 
-    isRunning: boolean
     isSubmitting: boolean
     submissionStateDetail: string
 
@@ -25,17 +17,12 @@ interface WorkspaceContextType {
     activeSubmission: Submission | null
     setActiveSubmission: (sub: Submission | null) => void
 
-    runResult: RunResult | null
-    setRunResult: React.Dispatch<React.SetStateAction<RunResult | null>>
-
     consoleTab: ConsoleTab
     setConsoleTab: (tab: ConsoleTab) => void
     isConsoleOpen: boolean
     setIsConsoleOpen: React.Dispatch<React.SetStateAction<boolean>>
 
-    runCode: () => Promise<void>
     submitCode: () => Promise<void>
-    onNewSubmission: (sub: Submission) => void
 }
 
 const WorkspaceContext = createContext<WorkspaceContextType | null>(null)
@@ -66,7 +53,6 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         setCode(currentProblem.starterCode)
     }, [currentProblem.starterCode, setCode])
 
-    const [isRunning, setIsRunning] = useState<boolean>(false)
     const [isSubmitting, setIsSubmitting] = useState<boolean>(false)
     const [submissionStateDetail, setSubmissionStateDetail] =
         useState<string>("")
@@ -75,52 +61,12 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     const [activeSubmission, setActiveSubmission] = useState<Submission | null>(
         null
     )
-    const [runResult, setRunResult] = useState<RunResult | null>(null)
 
     const [consoleTab, setConsoleTab] = useState<ConsoleTab>("testcase")
     const [isConsoleOpen, setIsConsoleOpen] = useState<boolean>(true)
 
-    const onNewSubmission = useCallback((sub: Submission) => {
-        setSubmissions((prev) => [sub, ...prev])
-    }, [])
-
-    const runCode = useCallback(async () => {
-        if (isRunning || isSubmitting) return
-
-        setIsRunning(true)
-        setIsConsoleOpen(true)
-        setConsoleTab("testresult")
-
-        try {
-            const result = await submitToBackendQueue({
-                problemId: currentProblem.id,
-                problemTitle: currentProblem.title,
-                code,
-                onStatusChange: (_status, detail) => {
-                    if (detail) setSubmissionStateDetail(detail)
-                },
-            })
-
-            const firstTest = result.testResults?.[0]
-            setRunResult({
-                passed: firstTest
-                    ? firstTest.passed
-                    : result.status === "Accepted",
-                output: firstTest?.output,
-                expected:
-                    firstTest?.expected ??
-                    currentProblem.testCases[0]?.expectedOutput,
-                caseName: currentProblem.testCases[0]?.name ?? "Case 1",
-            })
-            setActiveSubmission(result)
-            onNewSubmission(result)
-        } finally {
-            setIsRunning(false)
-        }
-    }, [isRunning, isSubmitting, currentProblem, code, onNewSubmission])
-
     const submitCode = useCallback(async () => {
-        if (isRunning || isSubmitting) return
+        if (isSubmitting) return
 
         setIsSubmitting(true)
         setIsConsoleOpen(true)
@@ -139,11 +85,11 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
             })
 
             setActiveSubmission(result)
-            onNewSubmission(result)
+            setSubmissions((prev) => [result, ...prev])
         } finally {
             setIsSubmitting(false)
         }
-    }, [isRunning, isSubmitting, currentProblem, code, onNewSubmission])
+    }, [isSubmitting, currentProblem, code])
 
     return (
         <WorkspaceContext.Provider
@@ -153,21 +99,16 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
                 code,
                 setCode,
                 resetCode,
-                isRunning,
                 isSubmitting,
                 submissionStateDetail,
                 submissions,
                 activeSubmission,
                 setActiveSubmission,
-                runResult,
-                setRunResult,
                 consoleTab,
                 setConsoleTab,
                 isConsoleOpen,
                 setIsConsoleOpen,
-                runCode,
                 submitCode,
-                onNewSubmission,
             }}
         >
             {children}

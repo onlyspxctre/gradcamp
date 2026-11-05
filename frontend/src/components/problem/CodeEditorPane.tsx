@@ -7,7 +7,6 @@ import {
 } from "react"
 import Editor, { type OnMount } from "@monaco-editor/react"
 import {
-    Play,
     Send,
     RotateCcw,
     Copy,
@@ -54,19 +53,11 @@ interface CodeEditorPaneProps {
     problem: Problem
     code: string
     setCode: (code: string) => void
-    onRunCode: () => void
     onSubmitCode: () => void
     onResetCode: () => void
-    isRunning: boolean
     isSubmitting: boolean
     activeSubmission: Submission | null
     submissionStateDetail?: string
-    runResult: {
-        passed: boolean
-        output?: string
-        expected?: string
-        caseName: string
-    } | null
     consoleTab: ConsoleTab
     setConsoleTab: (tab: ConsoleTab) => void
     isConsoleOpen: boolean
@@ -77,14 +68,11 @@ export function CodeEditorPane({
     problem,
     code,
     setCode,
-    onRunCode,
     onSubmitCode,
     onResetCode,
-    isRunning,
     isSubmitting,
     activeSubmission,
     submissionStateDetail,
-    runResult,
     consoleTab,
     setConsoleTab,
     isConsoleOpen,
@@ -431,28 +419,6 @@ export function CodeEditorPane({
 
                                         <button
                                             onClick={() =>
-                                                setConsoleTab("testresult")
-                                            }
-                                            className={`flex items-center gap-1 rounded-md px-2.5 py-1 transition-colors ${
-                                                consoleTab === "testresult"
-                                                    ? "bg-background font-semibold text-foreground shadow-xs"
-                                                    : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-                                            }`}
-                                        >
-                                            <span>Test Result</span>
-                                            {runResult && (
-                                                <span
-                                                    className={`size-1.5 rounded-full ${
-                                                        runResult.passed
-                                                            ? "bg-success"
-                                                            : "bg-destructive"
-                                                    }`}
-                                                />
-                                            )}
-                                        </button>
-
-                                        <button
-                                            onClick={() =>
                                                 setConsoleTab("submission")
                                             }
                                             className={`flex items-center gap-1 rounded-md px-2.5 py-1 transition-colors ${
@@ -574,72 +540,6 @@ export function CodeEditorPane({
                                     </div>
                                 )}
 
-                                {/* TAB: TEST RESULT */}
-                                {consoleTab === "testresult" && (
-                                    <div className="space-y-3">
-                                        {isRunning ? (
-                                            <div className="flex items-center justify-center gap-2 py-4 text-muted-foreground">
-                                                <Loader2 className="size-4 animate-spin text-primary" />
-                                                <span>
-                                                    Executing test case...
-                                                </span>
-                                            </div>
-                                        ) : runResult ? (
-                                            <div className="space-y-3">
-                                                <div className="flex items-center justify-between">
-                                                    <div className="flex items-center gap-2">
-                                                        {runResult.passed ? (
-                                                            <div className="flex items-center gap-1.5 font-medium text-success">
-                                                                <CheckCircle2 className="size-4" />
-                                                                <span>
-                                                                    Accepted
-                                                                </span>
-                                                            </div>
-                                                        ) : (
-                                                            <div className="flex items-center gap-1.5 font-medium text-destructive">
-                                                                <XCircle className="size-4" />
-                                                                <span>
-                                                                    Wrong Answer
-                                                                </span>
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                    <span className="font-mono text-[11px] text-muted-foreground">
-                                                        Case:{" "}
-                                                        {runResult.caseName}
-                                                    </span>
-                                                </div>
-
-                                                <div className="grid grid-cols-1 gap-2 font-mono sm:grid-cols-2">
-                                                    <div className="space-y-1">
-                                                        <span className="font-sans text-[11px] font-semibold text-muted-foreground">
-                                                            Output:
-                                                        </span>
-                                                        <pre className="overflow-x-auto rounded border border-border bg-muted/40 p-2 text-foreground">
-                                                            {runResult.output ??
-                                                                "--"}
-                                                        </pre>
-                                                    </div>
-                                                    <div className="space-y-1">
-                                                        <span className="font-sans text-[11px] font-semibold text-muted-foreground">
-                                                            Expected:
-                                                        </span>
-                                                        <pre className="overflow-x-auto rounded border border-border bg-muted/40 p-2 text-success">
-                                                            {runResult.expected ??
-                                                                "--"}
-                                                        </pre>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        ) : (
-                                            <div className="py-4 text-center text-muted-foreground">
-                                                Click "Run" to test your
-                                                solution.
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
-
                                 {/* TAB: SUBMISSION RESULT */}
                                 {consoleTab === "submission" && (
                                     <div className="space-y-3">
@@ -752,19 +652,8 @@ export function CodeEditorPane({
                         </span>
                         <div className="flex items-center gap-2">
                             <Button
-                                variant="outline"
-                                onClick={onRunCode}
-                                disabled={isRunning || isSubmitting}
-                                className="gap-2 text-xs"
-                            >
-                                <Play
-                                    className={`size-3 text-primary ${isRunning ? "animate-pulse" : ""}`}
-                                />
-                                {isRunning ? "Running…" : "Run code"}
-                            </Button>
-                            <Button
                                 onClick={onSubmitCode}
-                                disabled={isRunning || isSubmitting}
+                                disabled={isSubmitting}
                                 className="gap-2 px-4 text-xs"
                             >
                                 <Send className="size-3" />
@@ -775,18 +664,7 @@ export function CodeEditorPane({
                 </div>
             </ContextMenuTrigger>
             <ContextMenuContent className="w-56 text-xs">
-                <ContextMenuItem
-                    onClick={onRunCode}
-                    disabled={isRunning || isSubmitting}
-                >
-                    <Play className="mr-2 size-3.5 text-primary" />
-                    <span>Run Code</span>
-                    <ContextMenuShortcut>Ctrl+'</ContextMenuShortcut>
-                </ContextMenuItem>
-                <ContextMenuItem
-                    onClick={onSubmitCode}
-                    disabled={isRunning || isSubmitting}
-                >
+                <ContextMenuItem onClick={onSubmitCode} disabled={isSubmitting}>
                     <Send className="mr-2 size-3.5 text-primary" />
                     <span>Submit Solution</span>
                     <ContextMenuShortcut>Ctrl+↵</ContextMenuShortcut>

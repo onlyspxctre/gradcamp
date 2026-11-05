@@ -37,11 +37,15 @@ Use `bun run test` or plain `bun test` for unit tests and `bun run test:e2e` for
 
 Playwright downloads its browser separately from JavaScript dependencies. If it reports that a browser executable is missing, rerun `bunx playwright install chromium`.
 
-The browser tests start their own Vite server on port 4173 and cover the lecture and quiz at six desktop-to-mobile viewport sizes. They click recorded screen coordinates (without Playwright's automatic scrolling) and check that controls do not move across steps, questions, feedback, retries, or completion. To use an existing Chromium installation instead of downloading one, run `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/path/to/chromium bun run test:e2e`.
+The browser tests start their own Vite server on port 4173 and cover the lecture, quiz, and code submission workflow at six desktop-to-mobile viewport sizes. Submission tests mock the judge API, so they do not require the backend or worker. Lecture and quiz tests click recorded screen coordinates (without Playwright's automatic scrolling) and check that controls do not move across steps, questions, feedback, retries, or completion. To use an existing Chromium installation instead of downloading one, run `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/path/to/chromium bun run test:e2e`.
 
 ### Other package managers
 
 Bun is the canonical package manager, and `bun.lock` is the maintained lockfile. npm and pnpm can still be used for frontend package scripts (for example, `npm run build` or `pnpm run build`) with Node.js installed. However, the unit test script, `start_dev.sh`, and the Playwright web-server command require Bun. Full compatibility across all runtime/package-manager combinations has not been verified. Avoid mixing package managers within the same `node_modules` directory; remove it before switching.
+
+## Code submissions
+
+Use **Submit** (or **Ctrl/Cmd + Enter**) to evaluate a code solution against the backend's entire test suite. The console shows the submission status, all returned test results, or compiler errors, and the submission is added to history. There is no separate Run action or single-test evaluation mode.
 
 ## Assignment types
 
