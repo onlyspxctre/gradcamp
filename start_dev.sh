@@ -52,8 +52,8 @@ echo "[worker] Starting ./build/worker..."
 WORKER_PID=$!
 
 # 3. Frontend
-echo "[frontend] Starting pnpm run dev..."
-(cd "$ROOT_DIR/frontend" && pnpm run dev) &
+echo "[frontend] Starting bun run dev..."
+(cd "$ROOT_DIR/frontend" && bun run dev) &
 FRONTEND_PID=$!
 
 echo "=========================================="

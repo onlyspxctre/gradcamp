@@ -4,30 +4,44 @@ Gradcamp frontend sub-project built with React, Vite, TypeScript, Tailwind CSS, 
 
 ## Getting Started
 
+[Bun](https://bun.sh/) is the recommended JavaScript runtime and package manager. Install a current stable version (Bun 1.4.4 was used for local checks). Keep Node.js installed for the current Playwright CLI workflow; the existing `test` package script also explicitly invokes Node.js 22.18+.
+
 From the `frontend` directory:
 
 ```bash
 # Install dependencies
-pnpm install
+bun install
 
-# Start development server
-pnpm dev
+# Start development server using the Bun runtime
+bun --bun run dev
 
-# Type check and build for production
-pnpm build
+# Type check and build for production using Bun
+bun --bun run build
 
 # Lint
-pnpm lint
+bun --bun run lint
 
-# Pointer grading and progress regression tests (Node.js 22.18+)
-pnpm test
+# Pointer grading and progress regression tests using Bun
+bun test ./tests
 
 # Install Chromium once, then run browser layout/navigation regressions
-pnpm exec playwright install chromium
-pnpm test:e2e
+bunx playwright install chromium
+bun run test:e2e
 ```
 
-The browser tests start their own Vite server on port 4173 and cover the lecture and quiz at six desktop-to-mobile viewport sizes. They click recorded screen coordinates (without Playwright's automatic scrolling) and check that controls do not move across steps, questions, feedback, retries, or completion. To use an existing Chromium installation instead of downloading one, run `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/path/to/chromium pnpm test:e2e`.
+`bun --bun run` forces JavaScript tools to use Bun rather than their Node shebang. Merely invoking a package script with `bun run` does not guarantee that its tools run on Bun. The repository's development launcher and Playwright configuration already use Bun to launch the frontend script, but do not currently force the Bun runtime.
+
+### Test runners
+
+Do **not** use plain `bun test`: it also discovers `e2e/*.spec.ts`, which must be run by Playwright, and fails with “Playwright Test did not expect test() to be called here.” Use `bun test ./tests` for unit tests and `bun run test:e2e` for browser tests. To use the existing Node-based unit test script instead, run `bun run test`.
+
+Playwright downloads its browser separately from JavaScript dependencies. If it reports that a browser executable is missing, rerun `bunx playwright install chromium`.
+
+The browser tests start their own Vite server on port 4173 and cover the lecture and quiz at six desktop-to-mobile viewport sizes. They click recorded screen coordinates (without Playwright's automatic scrolling) and check that controls do not move across steps, questions, feedback, retries, or completion. To use an existing Chromium installation instead of downloading one, run `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/path/to/chromium bun run test:e2e`.
+
+### Other package managers
+
+npm and pnpm can still be used for frontend package scripts (for example, `npm run build` or `pnpm run build`) with Node.js installed. However, `start_dev.sh` and the Playwright web-server command currently require Bun. Full compatibility across all runtime/package-manager combinations has not been verified. Avoid mixing package managers within the same `node_modules` directory; remove it before switching.
 
 ## Assignment types
 
@@ -50,7 +64,7 @@ Learning navigation uses overlapping CSS grid items to reserve the tallest conte
 To add more UI components from shadcn:
 
 ```bash
-pnpm dlx shadcn@latest add <component-name>
+bunx --bun shadcn@latest add <component-name>
 ```
 
 Components are placed in `src/components/ui/`.
