@@ -4,7 +4,7 @@ Gradcamp frontend sub-project built with React, Vite, TypeScript, Tailwind CSS, 
 
 ## Getting Started
 
-[Bun](https://bun.sh/) is the recommended JavaScript runtime and package manager. Install a current stable version (Bun 1.4.4 was used for local checks). Keep Node.js installed for the current Playwright CLI workflow; the existing `test` package script also explicitly invokes Node.js 22.18+.
+[Bun](https://bun.sh/) is the recommended JavaScript runtime and package manager. Install a current stable version (Bun 1.4.4 was used for local checks). Keep Node.js installed for the current Playwright CLI workflow; unit tests run directly on Bun.
 
 From the `frontend` directory:
 
@@ -22,7 +22,7 @@ bun --bun run build
 bun --bun run lint
 
 # Pointer grading and progress regression tests using Bun
-bun test ./tests
+bun run test
 
 # Install Chromium once, then run browser layout/navigation regressions
 bunx playwright install chromium
@@ -33,7 +33,7 @@ bun run test:e2e
 
 ### Test runners
 
-Do **not** use plain `bun test`: it also discovers `e2e/*.spec.ts`, which must be run by Playwright, and fails with “Playwright Test did not expect test() to be called here.” Use `bun test ./tests` for unit tests and `bun run test:e2e` for browser tests. To use the existing Node-based unit test script instead, run `bun run test`.
+Use `bun run test` or plain `bun test` for unit tests and `bun run test:e2e` for browser tests. `bunfig.toml` limits Bun's test discovery to `tests/`, keeping Playwright's `e2e/*.spec.ts` files in their own runner.
 
 Playwright downloads its browser separately from JavaScript dependencies. If it reports that a browser executable is missing, rerun `bunx playwright install chromium`.
 
@@ -41,7 +41,7 @@ The browser tests start their own Vite server on port 4173 and cover the lecture
 
 ### Other package managers
 
-npm and pnpm can still be used for frontend package scripts (for example, `npm run build` or `pnpm run build`) with Node.js installed. However, `start_dev.sh` and the Playwright web-server command currently require Bun. Full compatibility across all runtime/package-manager combinations has not been verified. Avoid mixing package managers within the same `node_modules` directory; remove it before switching.
+Bun is the canonical package manager, and `bun.lock` is the maintained lockfile. npm and pnpm can still be used for frontend package scripts (for example, `npm run build` or `pnpm run build`) with Node.js installed. However, the unit test script, `start_dev.sh`, and the Playwright web-server command require Bun. Full compatibility across all runtime/package-manager combinations has not been verified. Avoid mixing package managers within the same `node_modules` directory; remove it before switching.
 
 ## Assignment types
 
