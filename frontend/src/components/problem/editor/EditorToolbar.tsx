@@ -72,7 +72,7 @@ export function EditorToolbar({
                 >
                     <SelectTrigger
                         size="sm"
-                        className="h-7 w-[64px] border-transparent bg-transparent font-medium shadow-none"
+                        className="h-7 w-[72px] border-transparent bg-transparent font-medium shadow-none"
                         aria-label="Editor font size"
                         title="Editor Font Size"
                     >
