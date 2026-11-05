@@ -47,6 +47,13 @@ Bun is the canonical package manager, and `bun.lock` is the maintained lockfile.
 
 Use **Submit** (or **Ctrl/Cmd + Enter**) to evaluate a code solution against the backend's entire test suite. The console shows the submission status, all returned test results, or compiler errors, and the submission is added to history. There is no separate Run action or single-test evaluation mode.
 
+### Workspace code layout
+
+- `src/components/problem/CodeEditorPane.tsx` composes the editor pane and owns shared toolbar/context-menu state (language, font size, copy feedback, fullscreen).
+- `src/components/problem/editor/EditorToolbar.tsx` and `EditorContextMenu.tsx` render controls using the same action callbacks.
+- `src/components/problem/editor/CodeEditor.tsx` owns Monaco configuration, theme integration, and its single resize observer.
+- `src/components/problem/editor/EditorConsole.tsx` owns console resizing and tab presentation. `TestCasesPanel.tsx` retains example selection and custom input while tabs change or the console is collapsed.
+
 ## Assignment types
 
 The Assignments page includes three formats:
