@@ -21,7 +21,7 @@ bun --bun run build
 # Lint
 bun --bun run lint
 
-# Pointer grading and progress regression tests using Bun
+# Workspace state, pointer grading, and progress regression tests using Bun
 bun run test
 
 # Install Chromium once, then run browser layout/navigation regressions
@@ -49,11 +49,14 @@ Use **Submit** (or **Ctrl/Cmd + Enter**) to evaluate a code solution against the
 
 ### Workspace code layout
 
+- `src/context/WorkspaceContext.tsx` owns the active assignment, per-problem code drafts, submission history, and selected submission ID. `src/lib/workspaceState.ts` defines the state transitions and derives the active code/result; `App.tsx` owns only top-level page navigation and passes the selected code assignment into `ProblemWorkspace.tsx`.
 - `src/components/problem/CodeEditorPane.tsx` composes the editor pane and owns shared toolbar/context-menu state (language, font size, copy feedback, fullscreen).
 - `src/components/problem/editor/EditorToolbar.tsx` and `EditorContextMenu.tsx` render controls using the same action callbacks.
 - `src/components/problem/editor/CodeEditor.tsx` owns Monaco configuration, theme integration, and its single resize observer.
 - `src/components/problem/editor/EditorConsole.tsx` owns console resizing and tab presentation. `TestCasesPanel.tsx` retains example selection and custom input while tabs change or the console is collapsed.
-- `src/components/submissions/SubmissionResult.tsx` is the shared result renderer for the console and `ProblemLeftPane.tsx`. Its history variant also shows the timestamp, submitted code snapshot, and Back to list action. Submission data and selection remain with the existing workspace/history owners; the shared renderer does not fetch or manage submissions.
+- `src/components/submissions/SubmissionResult.tsx` is the shared result renderer for the console and `ProblemLeftPane.tsx`. Its history variant also shows the timestamp, submitted code snapshot, and Back to list action. Both panes receive the same selected submission derived from context history, rather than keeping separate submission objects. `ProblemLeftPane.tsx` owns only whether its history list or detail is visible: Back to list and switching detail tabs do not clear the console result. The shared renderer does not fetch or manage submissions.
+
+Changing assignments clears submission selection but preserves code drafts and history. A submission that completes after navigation is always recorded, but is selected only if its code assignment is still active. `tests/workspace.test.ts` covers these transitions; `e2e/workspace-state.spec.ts` covers shared pane selection, Back to list, and completion after code/lecture/quiz navigation.
 
 ## Assignment types
 

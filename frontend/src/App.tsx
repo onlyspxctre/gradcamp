@@ -12,14 +12,10 @@ import { WorkspaceProvider, useWorkspace } from "@/context/WorkspaceContext"
 
 function AppContent() {
     const [activeNavTab, setActiveNavTab] = useState<ActiveNavTab>("workspace")
-    const { setCurrentProblem, submissions } = useWorkspace()
-    const [activeAssignment, setActiveAssignment] = useState<Assignment>(
-        MOCK_PROBLEMS[0]
-    )
+    const { activeAssignment, selectAssignment, submissions } = useWorkspace()
 
-    const handleSelectProblem = (assignment: Assignment) => {
-        setActiveAssignment(assignment)
-        if (assignment.kind === "code") setCurrentProblem(assignment)
+    const handleSelectAssignment = (assignment: Assignment) => {
+        selectAssignment(assignment)
         setActiveNavTab("workspace")
     }
 
@@ -42,12 +38,15 @@ function AppContent() {
             >
                 {activeNavTab === "workspace" &&
                     (activeAssignment.kind === "code" ? (
-                        <ProblemWorkspace />
+                        <ProblemWorkspace
+                            key={activeAssignment.id}
+                            problem={activeAssignment}
+                        />
                     ) : (
                         <PointersAssignmentView
                             key={activeAssignment.id}
                             assignment={activeAssignment}
-                            onSelectAssignment={handleSelectProblem}
+                            onSelectAssignment={handleSelectAssignment}
                             onBack={() => setActiveNavTab("assignments")}
                         />
                     ))}
@@ -56,7 +55,7 @@ function AppContent() {
                     <ProblemListView
                         problems={ASSIGNMENTS}
                         submissions={submissions}
-                        onSelectProblem={handleSelectProblem}
+                        onSelectProblem={handleSelectAssignment}
                     />
                 )}
 
@@ -64,7 +63,7 @@ function AppContent() {
                     <GlobalSubmissionsView
                         submissions={submissions}
                         problems={MOCK_PROBLEMS}
-                        onSelectProblem={handleSelectProblem}
+                        onSelectProblem={handleSelectAssignment}
                     />
                 )}
             </main>

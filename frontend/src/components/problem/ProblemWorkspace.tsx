@@ -10,17 +10,17 @@ import { CodeEditorPane } from "./CodeEditorPane"
 import { useWorkspace } from "@/context/WorkspaceContext"
 import { GripVertical } from "lucide-react"
 import { usePaneResize } from "@/hooks/usePaneResize"
+import type { Problem, ProblemLeftTab } from "@/types"
 
-export function ProblemWorkspace() {
+export function ProblemWorkspace({ problem }: { problem: Problem }) {
     const {
-        currentProblem,
         code,
         setCode,
         resetCode,
         isSubmitting,
         submissions,
         activeSubmission,
-        setActiveSubmission,
+        selectSubmission,
         submissionStateDetail,
         consoleTab,
         setConsoleTab,
@@ -29,9 +29,7 @@ export function ProblemWorkspace() {
         submitCode,
     } = useWorkspace()
 
-    const [leftTab, setLeftTab] = useState<"description" | "submissions">(
-        "description"
-    )
+    const [leftTab, setLeftTab] = useState<ProblemLeftTab>("description")
 
     const containerRef = useRef<HTMLDivElement>(null)
     const applySplit = useCallback((value: number) => {
@@ -85,9 +83,9 @@ export function ProblemWorkspace() {
                         className="h-px w-8 bg-primary/35"
                         aria-hidden="true"
                     />
-                    <span>{currentProblem.category}</span>
+                    <span>{problem.category}</span>
                     <span className="font-mono text-[10px]">
-                        / {String(currentProblem.numericId).padStart(2, "0")}
+                        / {String(problem.numericId).padStart(2, "0")}
                     </span>
                 </div>
             </div>
@@ -99,12 +97,13 @@ export function ProblemWorkspace() {
                 {/* Reading pane */}
                 <div className="workspace-panel h-[480px] shrink-0 md:h-full md:w-[var(--split)]">
                     <ProblemLeftPane
-                        problem={currentProblem}
+                        problem={problem}
                         submissions={submissions}
+                        activeSubmission={activeSubmission}
                         activeTab={leftTab}
                         setActiveTab={setLeftTab}
-                        onSelectSubmission={(sub) => {
-                            setActiveSubmission(sub)
+                        onSelectSubmission={(id) => {
+                            selectSubmission(id)
                             setConsoleTab("submission")
                             setIsConsoleOpen(true)
                         }}
@@ -141,7 +140,7 @@ export function ProblemWorkspace() {
                 {/* Editor and test console */}
                 <div className="workspace-panel h-[560px] shrink-0 md:h-full md:flex-1">
                     <CodeEditorPane
-                        problem={currentProblem}
+                        problem={problem}
                         code={code}
                         setCode={setCode}
                         onSubmitCode={submitCode}

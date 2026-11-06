@@ -1,11 +1,23 @@
-import React, { createContext, useContext, useState, useCallback } from "react"
-import type { Problem, Submission, ConsoleTab } from "@/types"
+import React, {
+    createContext,
+    useContext,
+    useState,
+    useCallback,
+    useReducer,
+} from "react"
+import type { Assignment, Submission, ConsoleTab } from "@/types"
 import { submitToBackendQueue } from "@/services/judgeService"
 import { MOCK_PROBLEMS } from "@/data/mockProblems"
+import {
+    getActiveCode,
+    getActiveSubmission,
+    initialWorkspaceState,
+    workspaceReducer,
+} from "@/lib/workspaceState"
 
 interface WorkspaceContextType {
-    currentProblem: Problem
-    setCurrentProblem: (problem: Problem) => void
+    activeAssignment: Assignment
+    selectAssignment: (assignment: Assignment) => void
     code: string
     setCode: (code: string) => void
     resetCode: () => void
@@ -15,7 +27,7 @@ interface WorkspaceContextType {
 
     submissions: Submission[]
     activeSubmission: Submission | null
-    setActiveSubmission: (sub: Submission | null) => void
+    selectSubmission: (id: string) => void
 
     consoleTab: ConsoleTab
     setConsoleTab: (tab: ConsoleTab) => void
@@ -28,74 +40,65 @@ interface WorkspaceContextType {
 const WorkspaceContext = createContext<WorkspaceContextType | null>(null)
 
 export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
-    const [currentProblem, setCurrentProblem] = useState<Problem>(
-        MOCK_PROBLEMS[0]
+    const [state, dispatch] = useReducer(
+        workspaceReducer,
+        MOCK_PROBLEMS[0],
+        initialWorkspaceState
     )
+    const { activeAssignment, submissions } = state
+    const code = getActiveCode(state)
+    const activeSubmission = getActiveSubmission(state)
 
-    // Preserve editor code per problem across tab switches and problem changes
-    const [codeCache, setCodeCache] = useState<Record<string, string>>({
-        [MOCK_PROBLEMS[0].id]: MOCK_PROBLEMS[0].starterCode,
-    })
-
-    const code = codeCache[currentProblem.id] ?? currentProblem.starterCode
-
-    const setCode = useCallback(
-        (newCode: string) => {
-            setCodeCache((prev) => ({
-                ...prev,
-                [currentProblem.id]: newCode,
-            }))
-        },
-        [currentProblem.id]
-    )
-
+    const selectAssignment = useCallback((assignment: Assignment) => {
+        dispatch({ type: "select-assignment", assignment })
+    }, [])
+    const selectSubmission = useCallback((id: string) => {
+        dispatch({ type: "select-submission", id })
+    }, [])
+    const setCode = useCallback((code: string) => {
+        dispatch({ type: "edit-code", code })
+    }, [])
     const resetCode = useCallback(() => {
-        setCode(currentProblem.starterCode)
-    }, [currentProblem.starterCode, setCode])
+        dispatch({ type: "reset-code" })
+    }, [])
 
     const [isSubmitting, setIsSubmitting] = useState<boolean>(false)
     const [submissionStateDetail, setSubmissionStateDetail] =
         useState<string>("")
 
-    const [submissions, setSubmissions] = useState<Submission[]>([])
-    const [activeSubmission, setActiveSubmission] = useState<Submission | null>(
-        null
-    )
-
     const [consoleTab, setConsoleTab] = useState<ConsoleTab>("testcase")
     const [isConsoleOpen, setIsConsoleOpen] = useState<boolean>(true)
 
     const submitCode = useCallback(async () => {
-        if (isSubmitting) return
+        if (isSubmitting || activeAssignment.kind !== "code") return
 
         setIsSubmitting(true)
         setIsConsoleOpen(true)
         setConsoleTab("submission")
-        setActiveSubmission(null)
+        dispatch({ type: "submission-started" })
         setSubmissionStateDetail("Connecting to backend /upload...")
 
         try {
             const result = await submitToBackendQueue({
-                problemId: currentProblem.id,
-                problemTitle: currentProblem.title,
+                problemId: activeAssignment.id,
+                problemTitle: activeAssignment.title,
                 code,
                 onStatusChange: (_status, detail) => {
                     if (detail) setSubmissionStateDetail(detail)
                 },
             })
 
-            setActiveSubmission(result)
-            setSubmissions((prev) => [result, ...prev])
+            dispatch({ type: "submission-completed", submission: result })
         } finally {
             setIsSubmitting(false)
         }
-    }, [isSubmitting, currentProblem, code])
+    }, [isSubmitting, activeAssignment, code])
 
     return (
         <WorkspaceContext.Provider
             value={{
-                currentProblem,
-                setCurrentProblem,
+                activeAssignment,
+                selectAssignment,
                 code,
                 setCode,
                 resetCode,
@@ -103,7 +106,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
                 submissionStateDetail,
                 submissions,
                 activeSubmission,
-                setActiveSubmission,
+                selectSubmission,
                 consoleTab,
                 setConsoleTab,
                 isConsoleOpen,

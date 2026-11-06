@@ -12,20 +12,23 @@ import { AddTwoIntegersVisualizer } from "./AddTwoIntegersVisualizer"
 interface ProblemLeftPaneProps {
     problem: Problem
     submissions: Submission[]
+    activeSubmission: Submission | null
     activeTab: ProblemLeftTab
     setActiveTab: (tab: ProblemLeftTab) => void
-    onSelectSubmission?: (sub: Submission) => void
+    onSelectSubmission: (id: string) => void
 }
 
 export function ProblemLeftPane({
     problem,
     submissions,
+    activeSubmission,
     activeTab,
     setActiveTab,
     onSelectSubmission,
 }: ProblemLeftPaneProps) {
-    const [selectedSubDetail, setSelectedSubDetail] =
-        useState<Submission | null>(null)
+    // This controls only list/detail visibility. The context owns the selection,
+    // so returning to the list does not clear the result shown in the console.
+    const [showSubmissionDetail, setShowSubmissionDetail] = useState(false)
 
     const problemSubmissions = submissions.filter(
         (s) => s.problemId === problem.id
@@ -55,7 +58,7 @@ export function ProblemLeftPane({
                                 ? "submissions"
                                 : "description"
                     setActiveTab(nextTab)
-                    setSelectedSubDetail(null)
+                    setShowSubmissionDetail(false)
                     event.currentTarget
                         .querySelector<HTMLButtonElement>(`#${nextTab}-tab`)
                         ?.focus()
@@ -64,7 +67,7 @@ export function ProblemLeftPane({
                 <button
                     onClick={() => {
                         setActiveTab("description")
-                        setSelectedSubDetail(null)
+                        setShowSubmissionDetail(false)
                     }}
                     className="pane-tab"
                     role="tab"
@@ -80,7 +83,7 @@ export function ProblemLeftPane({
                 <button
                     onClick={() => {
                         setActiveTab("submissions")
-                        setSelectedSubDetail(null)
+                        setShowSubmissionDetail(false)
                     }}
                     className="pane-tab"
                     role="tab"
@@ -223,16 +226,16 @@ export function ProblemLeftPane({
                             </p>
                         </div>
 
-                        {selectedSubDetail ? (
+                        {showSubmissionDetail && activeSubmission ? (
                             <SubmissionResult
-                                submission={selectedSubDetail}
+                                submission={activeSubmission}
                                 variant="history"
                                 headerAction={
                                     <Button
                                         variant="ghost"
                                         size="xs"
                                         onClick={() =>
-                                            setSelectedSubDetail(null)
+                                            setShowSubmissionDetail(false)
                                         }
                                     >
                                         Back to list
@@ -255,8 +258,8 @@ export function ProblemLeftPane({
                                     <div
                                         key={sub.id}
                                         onClick={() => {
-                                            setSelectedSubDetail(sub)
-                                            onSelectSubmission?.(sub)
+                                            onSelectSubmission(sub.id)
+                                            setShowSubmissionDetail(true)
                                         }}
                                         className="flex cursor-pointer items-center justify-between rounded-lg border border-border bg-card p-3 text-xs transition-colors hover:bg-muted/30"
                                     >
