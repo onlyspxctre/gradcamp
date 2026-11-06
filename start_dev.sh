@@ -8,7 +8,7 @@ cd "$ROOT_DIR"
 BACKEND_BIN="$ROOT_DIR/build/backend"
 WORKER_BIN="$ROOT_DIR/build/worker"
 
-if [ ! -x "$BACKEND_BIN" ] || [ ! -x "$WORKER_BIN" ]; then
+if [[ ! -x "$BACKEND_BIN" || ! -x "$WORKER_BIN" ]]; then
     echo "Binaries not found. Running make to compile backend and worker..."
     make
 fi
@@ -19,15 +19,15 @@ FRONTEND_PID=""
 
 cleanup() {
     echo -e "\nShutting down dev services..."
-    if [ -n "$BACKEND_PID" ] && kill -0 "$BACKEND_PID" 2>/dev/null; then
+    if [[ -n "$BACKEND_PID" ]] && kill -0 "$BACKEND_PID" 2>/dev/null; then
         echo "Stopping backend (PID $BACKEND_PID)..."
         kill "$BACKEND_PID" 2>/dev/null || true
     fi
-    if [ -n "$WORKER_PID" ] && kill -0 "$WORKER_PID" 2>/dev/null; then
+    if [[ -n "$WORKER_PID" ]] && kill -0 "$WORKER_PID" 2>/dev/null; then
         echo "Stopping worker (PID $WORKER_PID)..."
         kill "$WORKER_PID" 2>/dev/null || true
     fi
-    if [ -n "$FRONTEND_PID" ] && kill -0 "$FRONTEND_PID" 2>/dev/null; then
+    if [[ -n "$FRONTEND_PID" ]] && kill -0 "$FRONTEND_PID" 2>/dev/null; then
         echo "Stopping frontend (PID $FRONTEND_PID)..."
         kill "$FRONTEND_PID" 2>/dev/null || true
     fi
