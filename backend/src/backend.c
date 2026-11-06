@@ -203,6 +203,12 @@ void on_upload(fio_http_s *h) {
     }
 
     size_t body_len = fio_http_body_length(h);
+    // Handler-side: the vendored parser's size rejection can crash on chunked bodies.
+    if (body_len > 1024 * 1024) { // Maximum source size: 1 MiB.
+        fio_http_status_set(h, 413);
+        fio_http_write(h, fio_string_from_cstr("Payload Too Large\n"), .finish = 1);
+        return;
+    }
     if (!body_len) {
         fio_http_status_set(h, 400);
         fio_http_write(h, fio_string_from_cstr("Empty Body\n"), .finish = 1);
