@@ -28,11 +28,19 @@ for (const scenario of [
                               status: "completed",
                               results: {
                                   tests: [
-                                      { name: "First test", passed: true },
+                                      {
+                                          name: "First test",
+                                          passed: true,
+                                          error: "",
+                                      },
                                       {
                                           name: "Second test",
                                           passed:
                                               scenario.status === "Accepted",
+                                          error:
+                                              scenario.status === "Accepted"
+                                                  ? ""
+                                                  : "Expected '-6', got '-14'",
                                       },
                                   ],
                               },
@@ -116,6 +124,13 @@ for (const scenario of [
                 await expect(
                     result.getByText("Second test", { exact: true })
                 ).toBeVisible()
+                if (scenario.status === "Wrong Answer") {
+                    await expect(
+                        result.getByText("Expected '-6', got '-14'", {
+                            exact: true,
+                        })
+                    ).toBeVisible()
+                }
             }
         }
         if (scenario.status !== "Compile Error") {

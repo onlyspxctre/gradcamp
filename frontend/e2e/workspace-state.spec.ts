@@ -21,7 +21,9 @@ test("history and console share selection while Back to list changes only presen
             json: {
                 status: "completed",
                 results: {
-                    tests: [{ name: `Attempt ${attempt}`, passed: true }],
+                    tests: [
+                        { name: `Attempt ${attempt}`, passed: true, error: "" },
+                    ],
                 },
             },
         })
@@ -112,7 +114,9 @@ test("a result completing after assignment navigation stays in history without l
         await route.fulfill({
             json: {
                 status: "completed",
-                results: { tests: [{ name: "Late result", passed: true }] },
+                results: {
+                    tests: [{ name: "Late result", passed: true, error: "" }],
+                },
             },
         })
     })

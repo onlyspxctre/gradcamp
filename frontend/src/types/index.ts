@@ -62,9 +62,7 @@ export interface Problem extends AssignmentBase {
 export interface TestResultItem {
     name: string
     passed: boolean
-    output?: string
-    expected?: string
-    durationMs?: number
+    error: string
 }
 
 export interface Submission {

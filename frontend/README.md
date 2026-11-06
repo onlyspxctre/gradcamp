@@ -47,6 +47,14 @@ Bun is the canonical package manager, and `bun.lock` is the maintained lockfile.
 
 Use **Submit** (or **Ctrl/Cmd + Enter**) to evaluate a code solution against the backend's entire test suite. The console shows the submission status, all returned test results, or compiler errors, and the submission is added to history. There is no separate Run action or single-test evaluation mode.
 
+### Grading response consumption
+
+`src/services/judgeContract.ts` validates the current `/fetch` response before `judgeService.ts` creates a submission. Pending/in-progress responses contain a lifecycle status; failed jobs may contain a top-level `error`. Completed responses must contain a nonempty `results.tests` array whose entries have a string `name`, boolean `passed`, and string `error` (empty for a passing test). Additional fields are ignored. Malformed JSON or invalid response fields produce an explicit protocol-error message instead of a fabricated test result.
+
+Per-test diagnostics are retained in history and rendered as plain text in both result panes. The evaluator does not currently emit separate `output`, `expected`, or timing fields. This consumer change does not alter backend behavior, polling budgets, or existing verdict labels: failed tests still map to Wrong Answer and failed jobs to Compile Error. Diagnostic strings are not parsed to infer verdicts; authoritative typed verdicts remain deferred.
+
+`tests/judgeContract.test.ts` and `tests/judgeService.test.ts` cover response validation and diagnostic preservation. `e2e/grading-diagnostics.spec.ts` checks both result views, including safe rendering of HTML-like output and malformed responses.
+
 ### Workspace code layout
 
 - `src/context/WorkspaceContext.tsx` owns the active assignment, per-problem code drafts, submission history, and selected submission ID. `src/lib/workspaceState.ts` defines the state transitions and derives the active code/result; `App.tsx` owns only top-level page navigation and passes the selected code assignment into `ProblemWorkspace.tsx`.

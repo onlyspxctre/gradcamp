@@ -1,4 +1,5 @@
-import type { Submission, SubmissionStatus, TestResultItem } from "@/types"
+import type { Submission, SubmissionStatus } from "@/types"
+import { parseJudgeResponse } from "./judgeContract"
 
 function generateJobId(): string {
     if (typeof crypto !== "undefined" && crypto.randomUUID) {
@@ -67,26 +68,28 @@ export async function submitToBackendQueue(
                 continue
             }
 
-            const data = await fetchRes.json().catch(() => null)
-            if (!data) continue
+            const payload: unknown = await fetchRes.json().catch(() => null)
+            const data = parseJudgeResponse(payload)
+            if (!data) {
+                return {
+                    id: jobId,
+                    problemId,
+                    problemTitle,
+                    language: "C",
+                    code,
+                    status: "Runtime Error",
+                    timestamp,
+                    testsPassed: 0,
+                    totalTests: 0,
+                    compileError:
+                        "Invalid grading response from backend (/fetch).",
+                }
+            }
 
             if (data.status === "completed") {
-                const tests: TestResultItem[] = (data.results?.tests || []).map(
-                    (t: {
-                        name: string
-                        passed: boolean
-                        output?: string
-                        expected?: string
-                    }) => ({
-                        name: t.name,
-                        passed: t.passed,
-                        output: t.output,
-                        expected: t.expected,
-                    })
-                )
-                const passedCount = tests.filter((t) => t.passed).length
-                const allPassed =
-                    tests.length > 0 && passedCount === tests.length
+                const tests = data.results.tests
+                const passedCount = tests.filter((test) => test.passed).length
+                const allPassed = passedCount === tests.length
 
                 return {
                     id: jobId,

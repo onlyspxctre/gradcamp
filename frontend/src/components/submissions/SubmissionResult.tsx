@@ -102,33 +102,42 @@ export function SubmissionResult({
                             <div
                                 key={index}
                                 className={cn(
-                                    "flex items-center rounded border border-border/60 p-2",
+                                    "min-w-0 space-y-2 rounded border border-border/60 p-2",
                                     history
-                                        ? "justify-between bg-muted/20"
-                                        : "gap-2 bg-muted/30 text-xs"
+                                        ? "bg-muted/20"
+                                        : "bg-muted/30 text-xs"
                                 )}
                             >
-                                <div className="flex min-w-0 items-center gap-2">
-                                    {result.passed ? (
-                                        <CheckCircle2 className="size-3.5 shrink-0 text-success" />
-                                    ) : (
-                                        <XCircle className="size-3.5 shrink-0 text-destructive" />
-                                    )}
-                                    <span
-                                        className={cn(
-                                            "font-medium",
-                                            history
-                                                ? "text-foreground"
-                                                : "truncate"
+                                <div className="flex items-center justify-between gap-2">
+                                    <div className="flex min-w-0 items-center gap-2">
+                                        {result.passed ? (
+                                            <CheckCircle2 className="size-3.5 shrink-0 text-success" />
+                                        ) : (
+                                            <XCircle className="size-3.5 shrink-0 text-destructive" />
                                         )}
-                                    >
-                                        {result.name}
-                                    </span>
+                                        <span
+                                            className={cn(
+                                                "font-medium",
+                                                history
+                                                    ? "text-foreground"
+                                                    : "truncate"
+                                            )}
+                                        >
+                                            {result.name}
+                                        </span>
+                                    </div>
+                                    {history && (
+                                        <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
+                                            {result.passed
+                                                ? "PASSED"
+                                                : "FAILED"}
+                                        </span>
+                                    )}
                                 </div>
-                                {history && (
-                                    <span className="font-mono text-[10px] text-muted-foreground">
-                                        {result.passed ? "PASSED" : "FAILED"}
-                                    </span>
+                                {result.error && (
+                                    <p className="font-mono text-[11px] break-words whitespace-pre-wrap text-muted-foreground">
+                                        {result.error}
+                                    </p>
                                 )}
                             </div>
                         ))}
