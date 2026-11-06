@@ -1,10 +1,10 @@
 # Frontend
 
-Gradcamp frontend sub-project built with React, Vite, TypeScript, Tailwind CSS, shadcn/ui, and Lucide icons.
+Gradcamp frontend sub-project built with React, Bun, TypeScript, Tailwind CSS, shadcn/ui, and Lucide icons.
 
 ## Getting Started
 
-[Bun](https://bun.sh/) is the recommended JavaScript runtime and package manager. Install a current stable version (Bun 1.4.4 was used for local checks). Keep Node.js installed for the current Playwright CLI workflow; unit tests run directly on Bun.
+[Bun](https://bun.sh/) supplies the package manager, runtime, bundler, development server, and unit test runner. Use Bun 1.4.4 or newer. All commands below run on Bun, including TypeScript, ESLint, and Playwright; a separate Node.js installation is not required. Playwright still needs a browser and its OS libraries.
 
 From the `frontend` directory:
 
@@ -13,35 +13,50 @@ From the `frontend` directory:
 bun install
 
 # Start development server using the Bun runtime
-bun --bun run dev
+bun run dev
 
 # Type check and build for production using Bun
-bun --bun run build
+bun run build
 
 # Lint
-bun --bun run lint
+bun run lint
 
 # Workspace state, pointer grading, and progress regression tests using Bun
 bun run test
 
 # Install Chromium once, then run browser layout/navigation regressions
-bunx playwright install chromium
+bunx --bun playwright install chromium
 bun run test:e2e
 ```
 
-`bun --bun run` forces JavaScript tools to use Bun rather than their Node shebang. Merely invoking a package script with `bun run` does not guarantee that its tools run on Bun. The repository's development launcher and Playwright configuration already use Bun to launch the frontend script, but do not currently force the Bun runtime.
+### Development and production
+
+- `bun run dev` starts `scripts/dev.ts` on `http://127.0.0.1:5173`, with React Fast Refresh and CSS hot reloading. `bun --hot` also reloads server-code changes.
+- `bun run build` type-checks the browser and tooling code with TypeScript, then uses `scripts/build.ts` to generate minified static HTML, JavaScript, CSS, and assets in `dist/`. Bun transpiles TypeScript but the separate type check remains required.
+- `bun run preview` serves the existing `dist/` build on `http://127.0.0.1:4173`; build first. Unknown HTML navigation paths fall back to the SPA, while missing assets return 404. This is a local preview, not a hardened production server.
+- Both servers forward `/upload` and `/fetch`, including query strings and request bodies, to the C backend at `http://localhost:3000`. An unreachable backend returns HTTP 502.
+- Set `HOST` and `PORT` to override the bind address and port, e.g. `HOST=0.0.0.0 PORT=5174 bun run dev`. Servers fail if their port is occupied rather than silently switching ports. Only expose them to trusted networks.
+
+`bunfig.toml` enables `bun-plugin-tailwind` for the dev server; the build script loads the same plugin explicitly. Import aliases come from `tsconfig.json`. HTML-referenced assets (including the favicon in `public/`) are bundled and fingerprinted; `public/` is not automatically copied or exposed as a directory. Reference new assets from HTML/CSS/JavaScript so they enter the build.
+
+Package scripts explicitly select Bun for CLI tools that otherwise have Node shebangs. Keep `bun.lock` as the sole maintained lockfile and use `bun install --frozen-lockfile` for reproducible installs.
 
 ### Test runners
 
 Use `bun run test` or plain `bun test` for unit tests and `bun run test:e2e` for browser tests. `bunfig.toml` limits Bun's test discovery to `tests/`, keeping Playwright's `e2e/*.spec.ts` files in their own runner.
 
-Playwright downloads its browser separately from JavaScript dependencies. If it reports that a browser executable is missing, rerun `bunx playwright install chromium`.
+Playwright downloads its browser separately from JavaScript dependencies. If it reports that a browser executable is missing, rerun `bunx --bun playwright install chromium`.
 
-The browser tests start their own Vite server on port 4173 and cover the lecture, quiz, and code submission workflow at six desktop-to-mobile viewport sizes. Submission tests mock the judge API, so they do not require the backend or worker. Lecture and quiz tests click recorded screen coordinates (without Playwright's automatic scrolling) and check that controls do not move across steps, questions, feedback, retries, or completion. To use an existing Chromium installation instead of downloading one, run `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/path/to/chromium bun run test:e2e`.
+The browser tests start their own Bun development server on port 4173 and cover the lecture, quiz, and code submission workflow at six desktop-to-mobile viewport sizes. Submission tests mock the judge API, so they do not require the backend or worker. Lecture and quiz tests click recorded screen coordinates (without Playwright's automatic scrolling) and check that controls do not move across steps, questions, feedback, retries, or completion. To use an existing Chromium installation instead of downloading one, run `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/path/to/chromium bun run test:e2e`.
 
-### Other package managers
+To run the same browser suite against a production build instead of the development server:
 
-Bun is the canonical package manager, and `bun.lock` is the maintained lockfile. npm and pnpm can still be used for frontend package scripts (for example, `npm run build` or `pnpm run build`) with Node.js installed. However, the unit test script, `start_dev.sh`, and the Playwright web-server command require Bun. Full compatibility across all runtime/package-manager combinations has not been verified. Avoid mixing package managers within the same `node_modules` directory; remove it before switching.
+```bash
+bun run build
+FRONTEND_PREVIEW=1 bun run test:e2e
+```
+
+TypeScript, ESLint, Prettier, and Playwright remain separate dependencies because Bun's bundler/test runner does not replace their type checking, linting, formatting, or browser automation.
 
 ## Code submissions
 

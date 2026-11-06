@@ -33,8 +33,10 @@ export default defineConfig({
         },
     ],
     webServer: {
-        command: "bun dev --host 127.0.0.1 --port 4173 --strictPort",
+        command: process.env.FRONTEND_PREVIEW
+            ? "HOST=127.0.0.1 PORT=4173 bun run preview"
+            : "HOST=127.0.0.1 PORT=4173 bun run dev",
         url: "http://127.0.0.1:4173",
-        reuseExistingServer: !process.env.CI,
+        reuseExistingServer: !process.env.CI && !process.env.FRONTEND_PREVIEW,
     },
 })
