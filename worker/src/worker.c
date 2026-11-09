@@ -1,8 +1,10 @@
 #define _DEFAULT_SOURCE
+#define _GNU_SOURCE
 
 #include <ctype.h>
 #include <errno.h>
 #include <hiredis.h>
+#include <poll.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -10,6 +12,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <time.h>
 #include <unistd.h>
 #include <yyjson.h>
 
@@ -45,12 +48,94 @@ static int ensure_job_dirs(const char *id) {
     return 0;
 }
 
+static int64_t monotonic_ms(void) {
+    struct timespec ts;
+
+    if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) {
+        return -1;
+    }
+
+    return (int64_t) ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+}
+
+enum wait_result {
+    WAIT_EXITED,
+    WAIT_TIMEOUT,
+    WAIT_ERROR
+};
+
+static enum wait_result wait_for_exit(pid_t pid, int timeout_ms, int *status) {
+    int64_t start = monotonic_ms();
+    if (start < 0) {
+        return WAIT_ERROR;
+    }
+
+    int64_t deadline = start + timeout_ms;
+
+    for (;;) {
+        pid_t rc = waitpid(pid, status, WNOHANG);
+
+        if (rc == pid) return WAIT_EXITED;
+        if (rc < 0 && errno != EINTR) return WAIT_ERROR;
+
+        int64_t now = monotonic_ms();
+        if (now < 0) return WAIT_ERROR;
+        if (now >= deadline) return WAIT_TIMEOUT;
+
+        int delay = (int) (deadline - now);
+        if (delay > 25) delay = 25;
+
+        if (poll(NULL, 0, delay) < 0 && errno != EINTR) return WAIT_ERROR;
+    }
+}
+
+#define TERMINATE_DEADLINE_MS 1000
+static bool terminate_and_reap(pid_t pid, bool reaped) {
+    if (reaped) {
+        return true;
+    }
+
+    if (kill(pid, SIGKILL) == -1 && errno != ESRCH) {
+        return false;
+    }
+
+    int64_t start = monotonic_ms();
+    if (start < 0) {
+        return false;
+    }
+
+    int64_t deadline_ms = start + TERMINATE_DEADLINE_MS;
+
+    for (;;) {
+        int status;
+        pid_t rc = waitpid(pid, &status, WNOHANG);
+
+        if (rc == pid) {
+            return true;
+        }
+
+        if (rc == -1 && errno != EINTR) {
+            return false;
+        }
+
+        int64_t now = monotonic_ms();
+        if (now < 0 || now >= deadline_ms) {
+            return false;
+        }
+
+        int64_t remaining = deadline_ms - now;
+        int delay_ms = remaining > 10 ? 10 : (int) remaining;
+
+        if (poll(NULL, 0, delay_ms) == -1 && errno != EINTR)
+            return false;
+    }
+}
+
 static void executor(const char *id, const char *question_id) {
     char bin_mount[256], out_mount[256], eval_mount[256];
     snprintf(bin_mount, sizeof(bin_mount), "type=bind,src=./job/%s/bin,dst=/workspace/bin,ro,relabel=private", id);
     snprintf(out_mount, sizeof(out_mount), "type=bind,src=./job/%s/out,dst=/workspace/out,rw,relabel=private", id);
-    snprintf(eval_mount, sizeof(eval_mount),
-            "type=bind,src=./questions/%s/evaluator,dst=/workspace/evaluator,ro,relabel=shared", question_id);
+    snprintf(eval_mount, sizeof(eval_mount), "type=bind,src=./questions/%s/evaluator,dst=/workspace/evaluator,ro,relabel=shared", question_id);
 
     char *args[] = {
         "docker",
@@ -175,12 +260,27 @@ static void job(const char *id, const char *question_id) {
     }
 
     int status = 0;
-    waitpid(pid, &status, 0);
-    if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
-        fprintf(stderr, "Compilation failed for job %s (exit code %d)\n", id, WEXITSTATUS(status));
-        reply = gradcamp_redis_run_cmd("HSET job:%s status failed error %s", id, "Compilation failed");
-        if (reply) freeReplyObject(reply);
-        return;
+    switch (wait_for_exit(pid, 10 * 1000, &status)) {
+        case WAIT_EXITED:
+            if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
+                fprintf(stderr, "Compilation failed for job %s (exit code %d)\n", id, WEXITSTATUS(status));
+                reply = gradcamp_redis_run_cmd("HSET job:%s status failed error %s", id, "Compilation failed");
+                if (reply) freeReplyObject(reply);
+                return;
+            }
+            break;
+        case WAIT_TIMEOUT:
+            fprintf(stderr, "Compilation timed out for job %s (exit code %d)\n", id, WEXITSTATUS(status));
+            reply = gradcamp_redis_run_cmd("HSET job:%s status failed error %s", id, "Compilation timed out");
+            if (reply) freeReplyObject(reply);
+            terminate_and_reap(pid, false);
+            return;
+        case WAIT_ERROR:
+            fprintf(stderr, "Compilation failed for job %s (exit code %d)\n", id, WEXITSTATUS(status));
+            reply = gradcamp_redis_run_cmd("HSET job:%s status failed error %s", id, "Compilation failed");
+            if (reply) freeReplyObject(reply);
+            terminate_and_reap(pid, false);
+            return;
     }
 
     // 4. Run
@@ -194,7 +294,28 @@ static void job(const char *id, const char *question_id) {
         executor(id, question_id);
     }
 
-    waitpid(pid, &status, 0);
+    switch (wait_for_exit(pid, 30 * 1000, &status)) {
+        case WAIT_EXITED:
+            if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
+                fprintf(stderr, "Evaluation failed for job %s (exit code %d)\n", id, WEXITSTATUS(status));
+                reply = gradcamp_redis_run_cmd("HSET job:%s status failed error %s", id, "Evaluation failed");
+                if (reply) freeReplyObject(reply);
+                return;
+            }
+            break;
+        case WAIT_TIMEOUT:
+            fprintf(stderr, "Evaluation timed out for job %s (exit code %d)\n", id, WEXITSTATUS(status));
+            reply = gradcamp_redis_run_cmd("HSET job:%s status failed error %s", id, "Evaluation timed out");
+            if (reply) freeReplyObject(reply);
+            terminate_and_reap(pid, false);
+            return;
+        case WAIT_ERROR:
+            fprintf(stderr, "Evaluation failed for job %s (exit code %d)\n", id, WEXITSTATUS(status));
+            reply = gradcamp_redis_run_cmd("HSET job:%s status failed error %s", id, "Evaluation failed");
+            if (reply) freeReplyObject(reply);
+            terminate_and_reap(pid, false);
+            return;
+    }
 
     // 5. Read results.json
     char out_file[160];
