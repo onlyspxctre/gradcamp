@@ -28,6 +28,30 @@ static int valid_job_id(const char *id) {
     return 1;
 }
 
+struct container_names {
+    char compiler[64];
+    char executor[64];
+};
+
+static int make_container_names(struct container_names *containers) {
+    unsigned char random_bytes[16];
+    if (getentropy(random_bytes, sizeof(random_bytes)) != 0) return -1;
+
+    // Client job IDs can be reused. Generate a fresh identity for each attempt,
+    // before forking, so the supervising job process retains both stage names.
+    static const char hex[] = "0123456789abcdef";
+    char attempt_id[sizeof(random_bytes) * 2 + 1];
+    for (size_t i = 0; i < sizeof(random_bytes); ++i) {
+        attempt_id[i * 2] = hex[random_bytes[i] >> 4];
+        attempt_id[i * 2 + 1] = hex[random_bytes[i] & 0x0f];
+    }
+    attempt_id[sizeof(attempt_id) - 1] = '\0';
+
+    snprintf(containers->compiler, sizeof(containers->compiler), "gradcamp-compile-%s", attempt_id);
+    snprintf(containers->executor, sizeof(containers->executor), "gradcamp-exec-%s", attempt_id);
+    return 0;
+}
+
 static int ensure_job_dirs(const char *id) {
     char path[160];
     int n = snprintf(path, sizeof(path), "./job/%s", id);
@@ -131,7 +155,7 @@ static bool terminate_and_reap(pid_t pid, bool reaped) {
     }
 }
 
-static void executor(const char *id, const char *question_id) {
+static void executor(const char *id, const char *question_id, char *container_name) {
     char bin_mount[256], out_mount[256], eval_mount[256];
     snprintf(bin_mount, sizeof(bin_mount), "type=bind,src=./job/%s/bin,dst=/workspace/bin,ro,relabel=private", id);
     snprintf(out_mount, sizeof(out_mount), "type=bind,src=./job/%s/out,dst=/workspace/out,rw,relabel=private", id);
@@ -158,6 +182,8 @@ static void executor(const char *id, const char *question_id) {
         out_mount,
         "--mount",
         eval_mount,
+        "--name",
+        container_name,
         "-e",
         "RESULTS_FILE=/workspace/out/results.json",
         "--userns=keep-id",
@@ -170,7 +196,7 @@ static void executor(const char *id, const char *question_id) {
     exit(1);
 }
 
-static void compiler(const char *id, const char *question_id) {
+static void compiler(const char *id, const char *question_id, char *container_name) {
     char src_mount[256], bin_mount[256], driver_mount[256];
     snprintf(src_mount, sizeof(src_mount), "type=bind,src=./job/%s/src,dst=/workspace/src,ro,relabel=private", id);
     snprintf(bin_mount, sizeof(bin_mount), "type=bind,src=./job/%s/bin,dst=/workspace/bin,rw,relabel=private", id);
@@ -197,6 +223,8 @@ static void compiler(const char *id, const char *question_id) {
         bin_mount,
         "--mount",
         driver_mount,
+        "--name",
+        container_name,
         "--userns=keep-id",
         "compiler:latest",
         NULL,
@@ -248,6 +276,16 @@ static void job(const char *id, const char *question_id) {
     fclose(fp);
     freeReplyObject(reply);
 
+    struct container_names containers;
+    if (make_container_names(&containers) != 0) {
+        int saved_errno = errno;
+        fprintf(stderr, "Failed to generate container names for job %s: %s\n", id, strerror(saved_errno));
+        reply = gradcamp_redis_run_cmd("HSET job:%s status failed error %s", id, "Failed to generate container names on worker");
+        if (reply) freeReplyObject(reply);
+        return;
+    }
+    fprintf(stderr, "Job %s containers: compiler=%s executor=%s\n", id, containers.compiler, containers.executor);
+
     // 3. Compile
     pid_t pid = fork();
     if (pid < 0) {
@@ -256,7 +294,7 @@ static void job(const char *id, const char *question_id) {
         if (reply) freeReplyObject(reply);
         return;
     } else if (pid == 0) {
-        compiler(id, question_id);
+        compiler(id, question_id, containers.compiler);
     }
 
     int status = 0;
@@ -299,7 +337,7 @@ static void job(const char *id, const char *question_id) {
         if (reply) freeReplyObject(reply);
         return;
     } else if (pid == 0) {
-        executor(id, question_id);
+        executor(id, question_id, containers.executor);
     }
 
     switch (wait_for_exit(pid, 30 * 1000, &status)) {
