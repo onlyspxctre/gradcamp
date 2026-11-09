@@ -2,6 +2,7 @@
 #define _GNU_SOURCE
 
 #include <assert.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
 static int test_getentropy(void *buffer, size_t length);
@@ -32,7 +33,8 @@ static int test_getentropy(void *buffer, size_t length) {
 
 static int test_execvp(const char *file, char *const argv[]) {
     assert(strcmp(file, "docker") == 0);
-    assert(strcmp(argv[1], "run") == 0);
+    assert(strcmp(argv[1], "create") == 0);
+    int labels = 0;
     int names = 0;
     bool auto_remove = false;
     size_t argc = 0;
@@ -42,9 +44,17 @@ static int test_execvp(const char *file, char *const argv[]) {
             assert(strcmp(argv[argc + 1], expected_name) == 0);
             ++names;
         }
+        if (strcmp(argv[argc], "--label") == 0) {
+            char expected_label[128];
+            snprintf(expected_label, sizeof(expected_label), CONTAINER_LABEL_PREFIX "%s", expected_name);
+            assert(argv[argc + 1]);
+            assert(strcmp(argv[argc + 1], expected_label) == 0);
+            ++labels;
+        }
         if (strcmp(argv[argc], "--rm") == 0) auto_remove = true;
     }
     assert(names == 1);
+    assert(labels == 1);
     assert(auto_remove);
     assert(strcmp(argv[argc - 1], expected_image) == 0);
     _exit(0);
@@ -88,8 +98,8 @@ int main(void) {
     assert(strcmp(first.compiler + strlen("gradcamp-compile-"),
                   first.executor + strlen("gradcamp-exec-")) == 0);
 
-    check_stage(compiler, first.compiler, "compiler:latest");
-    check_stage(executor, first.executor, "executor:latest");
+    check_stage(create_compiler, first.compiler, "compiler:latest");
+    check_stage(create_executor, first.executor, "executor:latest");
 
     fail_entropy = true;
     assert(make_container_names(&second) == -1);

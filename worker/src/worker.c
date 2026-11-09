@@ -4,19 +4,21 @@
 #include <ctype.h>
 #include <errno.h>
 #include <hiredis.h>
-#include <poll.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
-#include <sys/wait.h>
-#include <time.h>
 #include <unistd.h>
 #include <yyjson.h>
 
 #include "common/hiredis_client.h"
+#include "container_stage.h"
+
+#define COMPILER_TIMEOUT_MS 10000
+#define EXECUTOR_TIMEOUT_MS 30000
+#define CONTAINER_CLEANUP_MS 5000
 
 static int valid_job_id(const char *id) {
     if (!id) return 0;
@@ -72,98 +74,19 @@ static int ensure_job_dirs(const char *id) {
     return 0;
 }
 
-static int64_t monotonic_ms(void) {
-    struct timespec ts;
-
-    if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) {
-        return -1;
-    }
-
-    return (int64_t) ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
-}
-
-enum wait_result {
-    WAIT_EXITED,
-    WAIT_TIMEOUT,
-    WAIT_ERROR
-};
-
-static enum wait_result wait_for_exit(pid_t pid, int timeout_ms, int *status) {
-    int64_t start = monotonic_ms();
-    if (start < 0) {
-        return WAIT_ERROR;
-    }
-
-    int64_t deadline = start + timeout_ms;
-
-    for (;;) {
-        pid_t rc = waitpid(pid, status, WNOHANG);
-
-        if (rc == pid) return WAIT_EXITED;
-        if (rc < 0 && errno != EINTR) return WAIT_ERROR;
-
-        int64_t now = monotonic_ms();
-        if (now < 0) return WAIT_ERROR;
-        if (now >= deadline) return WAIT_TIMEOUT;
-
-        int delay = (int) (deadline - now);
-        if (delay > 25) delay = 25;
-
-        if (poll(NULL, 0, delay) < 0 && errno != EINTR) return WAIT_ERROR;
-    }
-}
-
-#define TERMINATE_DEADLINE_MS 1000
-static bool terminate_and_reap(pid_t pid, bool reaped) {
-    if (reaped) {
-        return true;
-    }
-
-    if (kill(pid, SIGKILL) == -1 && errno != ESRCH) {
-        return false;
-    }
-
-    int64_t start = monotonic_ms();
-    if (start < 0) {
-        return false;
-    }
-
-    int64_t deadline_ms = start + TERMINATE_DEADLINE_MS;
-
-    for (;;) {
-        int status;
-        pid_t rc = waitpid(pid, &status, WNOHANG);
-
-        if (rc == pid) {
-            return true;
-        }
-
-        if (rc == -1 && errno != EINTR) {
-            return false;
-        }
-
-        int64_t now = monotonic_ms();
-        if (now < 0 || now >= deadline_ms) {
-            return false;
-        }
-
-        int64_t remaining = deadline_ms - now;
-        int delay_ms = remaining > 10 ? 10 : (int) remaining;
-
-        if (poll(NULL, 0, delay_ms) == -1 && errno != EINTR)
-            return false;
-    }
-}
-
-static void executor(const char *id, const char *question_id, char *container_name) {
+static void create_executor(const char *id, const char *question_id, char *container_name) {
     char bin_mount[256], out_mount[256], eval_mount[256];
     snprintf(bin_mount, sizeof(bin_mount), "type=bind,src=./job/%s/bin,dst=/workspace/bin,ro,relabel=private", id);
     snprintf(out_mount, sizeof(out_mount), "type=bind,src=./job/%s/out,dst=/workspace/out,rw,relabel=private", id);
     snprintf(eval_mount, sizeof(eval_mount), "type=bind,src=./questions/%s/evaluator,dst=/workspace/evaluator,ro,relabel=shared", question_id);
+    char label[128];
+    snprintf(label, sizeof(label), CONTAINER_LABEL_PREFIX "%s", container_name);
 
     char *args[] = {
         "docker",
-        "run",
+        "create",
+        "--label",
+        label,
         "--rm",
         "--runtime=krun",
         "--network=none",
@@ -192,19 +115,23 @@ static void executor(const char *id, const char *question_id, char *container_na
     };
     execvp(args[0], args);
 
-    perror("Executor execvp failed");
-    exit(1);
+    perror("Executor create execvp failed");
+    _exit(127);
 }
 
-static void compiler(const char *id, const char *question_id, char *container_name) {
+static void create_compiler(const char *id, const char *question_id, char *container_name) {
     char src_mount[256], bin_mount[256], driver_mount[256];
     snprintf(src_mount, sizeof(src_mount), "type=bind,src=./job/%s/src,dst=/workspace/src,ro,relabel=private", id);
     snprintf(bin_mount, sizeof(bin_mount), "type=bind,src=./job/%s/bin,dst=/workspace/bin,rw,relabel=private", id);
     snprintf(driver_mount, sizeof(driver_mount), "type=bind,src=./questions/%s/driver.c,dst=/workspace/driver/driver.c,ro,relabel=shared", question_id);
+    char label[128];
+    snprintf(label, sizeof(label), CONTAINER_LABEL_PREFIX "%s", container_name);
 
     char *args[] = {
         "docker",
-        "run",
+        "create",
+        "--label",
+        label,
         "--rm",
         "--runtime=krun",
         "--network=none",
@@ -231,8 +158,21 @@ static void compiler(const char *id, const char *question_id, char *container_na
     };
     execvp(args[0], args);
 
-    perror("Compiler execvp failed");
-    exit(1);
+    perror("Compiler create execvp failed");
+    _exit(127);
+}
+
+static void record_stage_failure(const char *id, const char *stage, enum stage_result result) {
+    const char *reason = "failed";
+    if (result == STAGE_TIMED_OUT) reason = "timed out";
+    else if (result == STAGE_ERROR) reason = "supervision failed";
+    else if (result == STAGE_CLEANUP_FAILED) reason = "cleanup unconfirmed";
+
+    char error[128];
+    snprintf(error, sizeof(error), "%s %s", stage, reason);
+    fprintf(stderr, "%s for job %s\n", error, id);
+    redisReply *reply = gradcamp_redis_run_cmd("HSET job:%s status failed error %s", id, error);
+    if (reply) freeReplyObject(reply);
 }
 
 static void job(const char *id, const char *question_id) {
@@ -287,88 +227,21 @@ static void job(const char *id, const char *question_id) {
     fprintf(stderr, "Job %s containers: compiler=%s executor=%s\n", id, containers.compiler, containers.executor);
 
     // 3. Compile
-    pid_t pid = fork();
-    if (pid < 0) {
-        fprintf(stderr, "Compiler fork failed for job %s\n", id);
-        reply = gradcamp_redis_run_cmd("HSET job:%s status failed error %s", id, "Compiler process fork failed");
-        if (reply) freeReplyObject(reply);
+    enum stage_result result = run_container_stage(id, question_id, containers.compiler,
+                                                   create_compiler, COMPILER_TIMEOUT_MS,
+                                                   CONTAINER_CLEANUP_MS);
+    if (result != STAGE_OK) {
+        record_stage_failure(id, "Compilation", result);
         return;
-    } else if (pid == 0) {
-        compiler(id, question_id, containers.compiler);
-    }
-
-    int status = 0;
-    switch (wait_for_exit(pid, 10 * 1000, &status)) {
-        case WAIT_EXITED:
-            if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
-                if (WIFEXITED(status)) {
-                    fprintf(stderr, "Compilation failed for job %s (exit code %d)\n", id, WEXITSTATUS(status));
-                } else if (WIFSIGNALED(status)) {
-                    fprintf(stderr, "Compilation killed by signal %d for job %s\n", WTERMSIG(status), id);
-                } else {
-                    fprintf(stderr, "Unexpected compilation wait status %#x for job %s\n", status, id);
-                }
-                reply = gradcamp_redis_run_cmd("HSET job:%s status failed error %s", id, "Compilation failed");
-                if (reply) freeReplyObject(reply);
-                return;
-            }
-            break;
-        case WAIT_TIMEOUT:
-            fprintf(stderr, "Compilation timed out for job %s\n", id);
-            reply = gradcamp_redis_run_cmd("HSET job:%s status failed error %s", id, "Compilation timed out");
-            if (reply) freeReplyObject(reply);
-            terminate_and_reap(pid, false);
-            return;
-        case WAIT_ERROR: {
-            int wait_errno = errno;
-            fprintf(stderr, "Compilation supervision failed for job %s: %s\n", id, strerror(wait_errno));
-            reply = gradcamp_redis_run_cmd("HSET job:%s status failed error %s", id, "Compilation failed");
-            if (reply) freeReplyObject(reply);
-            terminate_and_reap(pid, false);
-            return;
-        }
     }
 
     // 4. Run
-    pid = fork();
-    if (pid < 0) {
-        fprintf(stderr, "Executor fork failed for job %s\n", id);
-        reply = gradcamp_redis_run_cmd("HSET job:%s status failed error %s", id, "Runner process fork failed");
-        if (reply) freeReplyObject(reply);
+    result = run_container_stage(id, question_id, containers.executor,
+                                 create_executor, EXECUTOR_TIMEOUT_MS,
+                                 CONTAINER_CLEANUP_MS);
+    if (result != STAGE_OK) {
+        record_stage_failure(id, "Evaluation", result);
         return;
-    } else if (pid == 0) {
-        executor(id, question_id, containers.executor);
-    }
-
-    switch (wait_for_exit(pid, 30 * 1000, &status)) {
-        case WAIT_EXITED:
-            if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
-                if (WIFEXITED(status)) {
-                    fprintf(stderr, "Evaluation failed for job %s (exit code %d)\n", id, WEXITSTATUS(status));
-                } else if (WIFSIGNALED(status)) {
-                    fprintf(stderr, "Evaluation killed by signal %d for job %s\n", WTERMSIG(status), id);
-                } else {
-                    fprintf(stderr, "Unexpected evaluation wait status %#x for job %s\n", status, id);
-                }
-                reply = gradcamp_redis_run_cmd("HSET job:%s status failed error %s", id, "Evaluation failed");
-                if (reply) freeReplyObject(reply);
-                return;
-            }
-            break;
-        case WAIT_TIMEOUT:
-            fprintf(stderr, "Evaluation timed out for job %s\n", id);
-            reply = gradcamp_redis_run_cmd("HSET job:%s status failed error %s", id, "Evaluation timed out");
-            if (reply) freeReplyObject(reply);
-            terminate_and_reap(pid, false);
-            return;
-        case WAIT_ERROR: {
-            int wait_errno = errno;
-            fprintf(stderr, "Evaluation supervision failed for job %s: %s\n", id, strerror(wait_errno));
-            reply = gradcamp_redis_run_cmd("HSET job:%s status failed error %s", id, "Evaluation failed");
-            if (reply) freeReplyObject(reply);
-            terminate_and_reap(pid, false);
-            return;
-        }
     }
 
     // 5. Read results.json
