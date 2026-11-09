@@ -263,24 +263,32 @@ static void job(const char *id, const char *question_id) {
     switch (wait_for_exit(pid, 10 * 1000, &status)) {
         case WAIT_EXITED:
             if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
-                fprintf(stderr, "Compilation failed for job %s (exit code %d)\n", id, WEXITSTATUS(status));
+                if (WIFEXITED(status)) {
+                    fprintf(stderr, "Compilation failed for job %s (exit code %d)\n", id, WEXITSTATUS(status));
+                } else if (WIFSIGNALED(status)) {
+                    fprintf(stderr, "Compilation killed by signal %d for job %s\n", WTERMSIG(status), id);
+                } else {
+                    fprintf(stderr, "Unexpected compilation wait status %#x for job %s\n", status, id);
+                }
                 reply = gradcamp_redis_run_cmd("HSET job:%s status failed error %s", id, "Compilation failed");
                 if (reply) freeReplyObject(reply);
                 return;
             }
             break;
         case WAIT_TIMEOUT:
-            fprintf(stderr, "Compilation timed out for job %s (exit code %d)\n", id, WEXITSTATUS(status));
+            fprintf(stderr, "Compilation timed out for job %s\n", id);
             reply = gradcamp_redis_run_cmd("HSET job:%s status failed error %s", id, "Compilation timed out");
             if (reply) freeReplyObject(reply);
             terminate_and_reap(pid, false);
             return;
-        case WAIT_ERROR:
-            fprintf(stderr, "Compilation failed for job %s (exit code %d)\n", id, WEXITSTATUS(status));
+        case WAIT_ERROR: {
+            int wait_errno = errno;
+            fprintf(stderr, "Compilation supervision failed for job %s: %s\n", id, strerror(wait_errno));
             reply = gradcamp_redis_run_cmd("HSET job:%s status failed error %s", id, "Compilation failed");
             if (reply) freeReplyObject(reply);
             terminate_and_reap(pid, false);
             return;
+        }
     }
 
     // 4. Run
@@ -297,24 +305,32 @@ static void job(const char *id, const char *question_id) {
     switch (wait_for_exit(pid, 30 * 1000, &status)) {
         case WAIT_EXITED:
             if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
-                fprintf(stderr, "Evaluation failed for job %s (exit code %d)\n", id, WEXITSTATUS(status));
+                if (WIFEXITED(status)) {
+                    fprintf(stderr, "Evaluation failed for job %s (exit code %d)\n", id, WEXITSTATUS(status));
+                } else if (WIFSIGNALED(status)) {
+                    fprintf(stderr, "Evaluation killed by signal %d for job %s\n", WTERMSIG(status), id);
+                } else {
+                    fprintf(stderr, "Unexpected evaluation wait status %#x for job %s\n", status, id);
+                }
                 reply = gradcamp_redis_run_cmd("HSET job:%s status failed error %s", id, "Evaluation failed");
                 if (reply) freeReplyObject(reply);
                 return;
             }
             break;
         case WAIT_TIMEOUT:
-            fprintf(stderr, "Evaluation timed out for job %s (exit code %d)\n", id, WEXITSTATUS(status));
+            fprintf(stderr, "Evaluation timed out for job %s\n", id);
             reply = gradcamp_redis_run_cmd("HSET job:%s status failed error %s", id, "Evaluation timed out");
             if (reply) freeReplyObject(reply);
             terminate_and_reap(pid, false);
             return;
-        case WAIT_ERROR:
-            fprintf(stderr, "Evaluation failed for job %s (exit code %d)\n", id, WEXITSTATUS(status));
+        case WAIT_ERROR: {
+            int wait_errno = errno;
+            fprintf(stderr, "Evaluation supervision failed for job %s: %s\n", id, strerror(wait_errno));
             reply = gradcamp_redis_run_cmd("HSET job:%s status failed error %s", id, "Evaluation failed");
             if (reply) freeReplyObject(reply);
             terminate_and_reap(pid, false);
             return;
+        }
     }
 
     // 5. Read results.json
