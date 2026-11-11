@@ -155,6 +155,20 @@ static bool terminate_and_reap(pid_t pid, bool reaped) {
     }
 }
 
+/**
+ * @brief Marks a job in Redis as failed.
+ *
+ * @return Returns 0 on success, or 1 if `gradcamp_redis_run_cmd` or Redis operation fails.
+ */
+static int mark_job_failed(const char *id, const char *message) {
+    redisReply *reply = gradcamp_redis_run_cmd("HSET job:%s status failed error %s", id, message);
+    if (!reply) return 1;
+
+    int failed = reply->type != REDIS_REPLY_INTEGER;
+    freeReplyObject(reply);
+    return failed;
+}
+
 static void executor(const char *id, const char *question_id, char *container_name) {
     char bin_mount[256], out_mount[256], eval_mount[256];
     snprintf(bin_mount, sizeof(bin_mount), "type=bind,src=./job/%s/bin,dst=/workspace/bin,ro,relabel=private", id);
@@ -239,8 +253,7 @@ static void job(const char *id, const char *question_id) {
     // 1. Ensure scratch directories exist
     if (ensure_job_dirs(id) != 0) {
         fprintf(stderr, "Failed to create directory structure for job %s\n", id);
-        redisReply *reply = gradcamp_redis_run_cmd("HSET job:%s status failed error %s", id, "Failed to create job directories on worker");
-        if (reply) freeReplyObject(reply);
+        mark_job_failed(id, "Failed to create job directories on worker");
         return;
     }
 
@@ -249,8 +262,7 @@ static void job(const char *id, const char *question_id) {
     if (!reply || reply->type != REDIS_REPLY_STRING) {
         fprintf(stderr, "Failed to fetch source for job %s from datastore\n", id);
         if (reply) freeReplyObject(reply);
-        reply = gradcamp_redis_run_cmd("HSET job:%s status failed error %s", id, "Source code not found in datastore");
-        if (reply) freeReplyObject(reply);
+        mark_job_failed(id, "Source code not found in datastore");
         return;
     }
 
@@ -260,8 +272,7 @@ static void job(const char *id, const char *question_id) {
     if (!fp) {
         perror("Failed to create source file");
         freeReplyObject(reply);
-        reply = gradcamp_redis_run_cmd("HSET job:%s status failed error %s", id, "Failed to create source file on worker");
-        if (reply) freeReplyObject(reply);
+        mark_job_failed(id, "Failed to create source file on worker");
         return;
     }
 
@@ -269,8 +280,7 @@ static void job(const char *id, const char *question_id) {
         perror("Failed to write source file");
         fclose(fp);
         freeReplyObject(reply);
-        reply = gradcamp_redis_run_cmd("HSET job:%s status failed error %s", id, "Failed to write source file on worker");
-        if (reply) freeReplyObject(reply);
+        mark_job_failed(id, "Failed to write source file on worker");
         return;
     }
     fclose(fp);
@@ -280,8 +290,7 @@ static void job(const char *id, const char *question_id) {
     if (make_container_names(&containers) != 0) {
         int saved_errno = errno;
         fprintf(stderr, "Failed to generate container names for job %s: %s\n", id, strerror(saved_errno));
-        reply = gradcamp_redis_run_cmd("HSET job:%s status failed error %s", id, "Failed to generate container names on worker");
-        if (reply) freeReplyObject(reply);
+        mark_job_failed(id, "Failed to generate container names on worker");
         return;
     }
     fprintf(stderr, "Job %s containers: compiler=%s executor=%s\n", id, containers.compiler, containers.executor);
@@ -290,8 +299,7 @@ static void job(const char *id, const char *question_id) {
     pid_t pid = fork();
     if (pid < 0) {
         fprintf(stderr, "Compiler fork failed for job %s\n", id);
-        reply = gradcamp_redis_run_cmd("HSET job:%s status failed error %s", id, "Compiler process fork failed");
-        if (reply) freeReplyObject(reply);
+        mark_job_failed(id, "Compiler process fork failed");
         return;
     } else if (pid == 0) {
         compiler(id, question_id, containers.compiler);
@@ -308,22 +316,19 @@ static void job(const char *id, const char *question_id) {
                 } else {
                     fprintf(stderr, "Unexpected compilation wait status %#x for job %s\n", status, id);
                 }
-                reply = gradcamp_redis_run_cmd("HSET job:%s status failed error %s", id, "Compilation failed");
-                if (reply) freeReplyObject(reply);
+                mark_job_failed(id, "Compilation failed");
                 return;
             }
             break;
         case WAIT_TIMEOUT:
             fprintf(stderr, "Compilation timed out for job %s\n", id);
-            reply = gradcamp_redis_run_cmd("HSET job:%s status failed error %s", id, "Compilation timed out");
-            if (reply) freeReplyObject(reply);
+            mark_job_failed(id, "Compilation timed out");
             terminate_and_reap(pid, false);
             return;
         case WAIT_ERROR: {
             int wait_errno = errno;
             fprintf(stderr, "Compilation supervision failed for job %s: %s\n", id, strerror(wait_errno));
-            reply = gradcamp_redis_run_cmd("HSET job:%s status failed error %s", id, "Compilation failed");
-            if (reply) freeReplyObject(reply);
+            mark_job_failed(id, "Compilation failed");
             terminate_and_reap(pid, false);
             return;
         }
@@ -333,8 +338,7 @@ static void job(const char *id, const char *question_id) {
     pid = fork();
     if (pid < 0) {
         fprintf(stderr, "Executor fork failed for job %s\n", id);
-        reply = gradcamp_redis_run_cmd("HSET job:%s status failed error %s", id, "Runner process fork failed");
-        if (reply) freeReplyObject(reply);
+        mark_job_failed(id, "Runner process fork failed");
         return;
     } else if (pid == 0) {
         executor(id, question_id, containers.executor);
@@ -350,22 +354,19 @@ static void job(const char *id, const char *question_id) {
                 } else {
                     fprintf(stderr, "Unexpected evaluation wait status %#x for job %s\n", status, id);
                 }
-                reply = gradcamp_redis_run_cmd("HSET job:%s status failed error %s", id, "Evaluation failed");
-                if (reply) freeReplyObject(reply);
+                mark_job_failed(id, "Evaluation failed");
                 return;
             }
             break;
         case WAIT_TIMEOUT:
             fprintf(stderr, "Evaluation timed out for job %s\n", id);
-            reply = gradcamp_redis_run_cmd("HSET job:%s status failed error %s", id, "Evaluation timed out");
-            if (reply) freeReplyObject(reply);
+            mark_job_failed(id, "Evaluation timed out");
             terminate_and_reap(pid, false);
             return;
         case WAIT_ERROR: {
             int wait_errno = errno;
             fprintf(stderr, "Evaluation supervision failed for job %s: %s\n", id, strerror(wait_errno));
-            reply = gradcamp_redis_run_cmd("HSET job:%s status failed error %s", id, "Evaluation failed");
-            if (reply) freeReplyObject(reply);
+            mark_job_failed(id, "Evaluation failed");
             terminate_and_reap(pid, false);
             return;
         }
@@ -377,8 +378,7 @@ static void job(const char *id, const char *question_id) {
     FILE *rf = fopen(out_file, "rb");
     if (!rf) {
         fprintf(stderr, "Failed to open results file for job %s\n", id);
-        reply = gradcamp_redis_run_cmd("HSET job:%s status failed error %s", id, "Results file not generated");
-        if (reply) freeReplyObject(reply);
+        mark_job_failed(id, "Results file not generated");
         return;
     }
 
@@ -388,16 +388,14 @@ static void job(const char *id, const char *question_id) {
 
     if (rlen <= 0) {
         fclose(rf);
-        reply = gradcamp_redis_run_cmd("HSET job:%s status failed error %s", id, "Results file was empty");
-        if (reply) freeReplyObject(reply);
+        mark_job_failed(id, "Results file was empty");
         return;
     }
 
     char *results_buf = malloc((size_t) rlen + 1);
     if (!results_buf) {
         fclose(rf);
-        reply = gradcamp_redis_run_cmd("HSET job:%s status failed error %s", id, "Memory allocation error");
-        if (reply) freeReplyObject(reply);
+        mark_job_failed(id, "Memory allocation error");
         return;
     }
 
