@@ -3,7 +3,7 @@
 Gradcamp monorepo.
 
 - `backend`: Backend API service (C)
-- `worker`: Grader worker service (C)
+- `worker`: Grader worker service (C + Podman + krun)
 - `common`: Shared library code (C)
 - `frontend`: Web frontend (React + Bun + Tailwind CSS + shadcn/ui)
 - `scripts`: Developer utilities and submission latency benchmarking

@@ -31,7 +31,7 @@ static int test_getentropy(void *buffer, size_t length) {
 }
 
 static int test_execvp(const char *file, char *const argv[]) {
-    assert(strcmp(file, "docker") == 0);
+    assert(strcmp(file, "podman") == 0);
     assert(strcmp(argv[1], "run") == 0);
     int names = 0;
     bool auto_remove = false;

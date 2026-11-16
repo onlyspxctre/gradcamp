@@ -5,7 +5,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$ROOT_DIR"
 
-CONTAINER_CMD="${CONTAINER_CMD:-docker}"
+CONTAINER_CMD="${CONTAINER_CMD:-podman}"
 
 echo "=========================================="
 echo " Building compiler:latest"
@@ -25,4 +25,4 @@ echo "=========================================="
 "$CONTAINER_CMD" build -t evalmaker:latest -f Dockerfile.build-evaluator .
 
 echo ""
-echo "Successfully built Docker images."
+echo "Successfully built Podman images."

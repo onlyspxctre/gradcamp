@@ -176,9 +176,10 @@ static void executor(const char *id, const char *question_id, char *container_na
     snprintf(eval_mount, sizeof(eval_mount), "type=bind,src=./questions/%s/evaluator,dst=/workspace/evaluator,ro,relabel=shared", question_id);
 
     char *args[] = {
-        "docker",
+        "podman",
         "run",
         "--rm",
+        "--timeout=30",
         "--runtime=krun",
         "--network=none",
         "--cpus=1.0",
@@ -217,9 +218,10 @@ static void compiler(const char *id, const char *question_id, char *container_na
     snprintf(driver_mount, sizeof(driver_mount), "type=bind,src=./questions/%s/driver.c,dst=/workspace/driver/driver.c,ro,relabel=shared", question_id);
 
     char *args[] = {
-        "docker",
+        "podman",
         "run",
         "--rm",
+        "--timeout=10",
         "--runtime=krun",
         "--network=none",
         "--cpus=1.0",
