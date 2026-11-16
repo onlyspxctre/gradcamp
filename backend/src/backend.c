@@ -5,6 +5,9 @@
 #define FIO_HTTP
 #define FIO_NO_TLS 1
 
+#define IP "127.0.0.1"
+#define PORT "3000"
+
 #include <fio-stl.h>
 #include <hiredis.h>
 #include <yyjson.h>
@@ -288,9 +291,9 @@ int main(void) {
 
     fio_state_callback_add(FIO_CALL_AT_EXIT, cleanup, NULL);
 
-    fio_http_listener_s *listener = fio_http_listen("0.0.0.0:3000", .on_http = on_request, .log = 1);
+    fio_http_listener_s *listener = fio_http_listen(IP ":" PORT, .on_http = on_request, .log = 1);
     if (!listener) {
-        fprintf(stderr, "Failed to start HTTP listener on 0.0.0.0:3000\n");
+        fprintf(stderr, "Failed to start HTTP listener on " IP ":" PORT "\n");
         cleanup(NULL);
         exit(1);
     }
