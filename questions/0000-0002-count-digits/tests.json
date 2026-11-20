@@ -1,0 +1,8 @@
+[
+    { "name": "Single digit", "args": ["7"], "expected": "1" },
+    { "name": "Trailing zeros", "args": ["1000"], "expected": "4" },
+    { "name": "Zero has one digit", "args": ["0"], "expected": "1" },
+    { "name": "Zero between other digits", "args": ["205"], "expected": "3" },
+    { "name": "Just below a power of ten", "args": ["999999999"], "expected": "9" },
+    { "name": "Largest allowed input", "args": ["1000000000"], "expected": "10" }
+]

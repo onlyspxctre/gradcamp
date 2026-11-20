@@ -1,4 +1,7 @@
 import type { Problem } from "@/types"
+import { COUNT_DIGITS } from "./problems/countDigits"
+import { COUNT_OCCURRENCES } from "./problems/countOccurrences"
+import { LARGEST_OF_THREE } from "./problems/largestOfThree"
 
 export const DEMO_PROBLEM: Problem = {
     kind: "code",
@@ -61,4 +64,9 @@ Implement the function \`add\` in C.`,
     ],
 }
 
-export const MOCK_PROBLEMS: Problem[] = [DEMO_PROBLEM]
+export const MOCK_PROBLEMS: Problem[] = [
+    DEMO_PROBLEM,
+    LARGEST_OF_THREE,
+    COUNT_DIGITS,
+    COUNT_OCCURRENCES,
+]

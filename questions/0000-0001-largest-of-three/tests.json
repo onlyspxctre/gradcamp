@@ -1,0 +1,8 @@
+[
+    { "name": "Largest is second", "args": ["4", "9", "2"], "expected": "9" },
+    { "name": "All negative", "args": ["-8", "-3", "-5"], "expected": "-3" },
+    { "name": "Two share the largest value", "args": ["7", "7", "1"], "expected": "7" },
+    { "name": "Largest is first", "args": ["10", "0", "-4"], "expected": "10" },
+    { "name": "Largest is third", "args": ["-2", "5", "8"], "expected": "8" },
+    { "name": "All equal", "args": ["3", "3", "3"], "expected": "3" }
+]

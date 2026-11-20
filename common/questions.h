@@ -13,6 +13,9 @@ static inline const struct grading_question *find_grading_question(const char *i
     // Only this registry supplies directory names for the worker's bind mounts.
     static const struct grading_question questions[] = {
         {"0", "0000-0000-add-two-integers"},
+        {"1", "0000-0001-largest-of-three"},
+        {"2", "0000-0002-count-digits"},
+        {"3", "0000-0003-count-occurrences"},
     };
 
     if (!id) return NULL;
