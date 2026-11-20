@@ -127,10 +127,10 @@ test("a result completing after assignment navigation stays in history without l
         await page.getByRole("button", { name: "Submit", exact: true }).click()
         await expect.poll(() => uploads).toBe(1)
         await navigation
-            .getByRole("button", { name: "Assignments", exact: true })
+            .getByRole("link", { name: "Assignments", exact: true })
             .click()
         await page
-            .getByRole("button", { name: "Pointers: the basics", exact: true })
+            .getByRole("link", { name: "Pointers: the basics", exact: true })
             .click()
         await expect(
             page.getByRole("heading", {
@@ -153,20 +153,20 @@ test("a result completing after assignment navigation stays in history without l
     }
 
     await navigation
-        .getByRole("button", { name: "Submissions", exact: true })
+        .getByRole("link", { name: "Submissions", exact: true })
         .click()
     const row = page.getByRole("table").locator("tbody tr")
     await expect(row).toHaveCount(1)
     await expect(row).toContainText("Accepted")
     await navigation
-        .getByRole("button", { name: "Workspace", exact: true })
+        .getByRole("link", { name: "Workspace", exact: true })
         .click()
     await expect(
         page.getByRole("heading", { name: "Pointers: memory lab", exact: true })
     ).toBeVisible()
 
     await navigation
-        .getByRole("button", { name: "Submissions", exact: true })
+        .getByRole("link", { name: "Submissions", exact: true })
         .click()
     await row.getByRole("button", { name: "Open", exact: true }).click()
     const workspace = page.getByRole("region", { name: "Coding workspace" })

@@ -7,7 +7,6 @@ import React, {
 } from "react"
 import type { Assignment, Submission, ConsoleTab } from "@/types"
 import { submitToBackendQueue } from "@/services/judgeService"
-import { MOCK_PROBLEMS } from "@/data/mockProblems"
 import {
     getActiveCode,
     getActiveSubmission,
@@ -16,8 +15,6 @@ import {
 } from "@/lib/workspaceState"
 
 interface WorkspaceContextType {
-    activeAssignment: Assignment
-    selectAssignment: (assignment: Assignment) => void
     code: string
     setCode: (code: string) => void
     resetCode: () => void
@@ -39,19 +36,26 @@ interface WorkspaceContextType {
 
 const WorkspaceContext = createContext<WorkspaceContextType | null>(null)
 
-export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
+export function WorkspaceProvider({
+    assignment,
+    children,
+}: {
+    assignment: Assignment
+    children: React.ReactNode
+}) {
     const [state, dispatch] = useReducer(
         workspaceReducer,
-        MOCK_PROBLEMS[0],
+        assignment,
         initialWorkspaceState
     )
+    // Apply route changes before rendering the editor with the previous draft.
+    if (state.activeAssignment !== assignment) {
+        dispatch({ type: "select-assignment", assignment })
+    }
     const { activeAssignment, submissions } = state
     const code = getActiveCode(state)
     const activeSubmission = getActiveSubmission(state)
 
-    const selectAssignment = useCallback((assignment: Assignment) => {
-        dispatch({ type: "select-assignment", assignment })
-    }, [])
     const selectSubmission = useCallback((id: string) => {
         dispatch({ type: "select-submission", id })
     }, [])
@@ -97,8 +101,6 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     return (
         <WorkspaceContext.Provider
             value={{
-                activeAssignment,
-                selectAssignment,
                 code,
                 setCode,
                 resetCode,

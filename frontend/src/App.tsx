@@ -1,4 +1,3 @@
-import { useState } from "react"
 import type { ActiveNavTab, Assignment } from "@/types"
 import { MOCK_PROBLEMS } from "@/data/mockProblems"
 import { ASSIGNMENTS } from "@/data/assignments"
@@ -9,15 +8,22 @@ import { ProblemWorkspace } from "@/components/problem/ProblemWorkspace"
 import { ProblemListView } from "@/components/catalog/ProblemListView"
 import { GlobalSubmissionsView } from "@/components/submissions/GlobalSubmissionsView"
 import { WorkspaceProvider, useWorkspace } from "@/context/WorkspaceContext"
+import { AppLink } from "@/components/common/AppLink"
+import { assignmentPath, useAppNavigation } from "@/lib/appNavigation"
 
-function AppContent() {
-    const [activeNavTab, setActiveNavTab] = useState<ActiveNavTab>("workspace")
-    const { activeAssignment, selectAssignment, submissions } = useWorkspace()
-
-    const handleSelectAssignment = (assignment: Assignment) => {
-        selectAssignment(assignment)
-        setActiveNavTab("workspace")
+function AppContent({
+    route,
+    workspaceAssignment,
+    navigate,
+}: ReturnType<typeof useAppNavigation>) {
+    const { submissions } = useWorkspace()
+    const tabPaths: Record<ActiveNavTab, string> = {
+        workspace: assignmentPath(workspaceAssignment),
+        assignments: "/assignments",
+        submissions: "/submissions",
     }
+    const handleSelectAssignment = (assignment: Assignment) =>
+        navigate(assignmentPath(assignment))
 
     return (
         <div className="app-shell flex h-dvh w-full flex-col overflow-hidden font-sans text-foreground">
@@ -28,7 +34,11 @@ function AppContent() {
                 Skip to content
             </a>
             {/* Top Navbar */}
-            <Navbar activeTab={activeNavTab} setActiveTab={setActiveNavTab} />
+            <Navbar
+                activeTab={route.page === "not-found" ? undefined : route.page}
+                tabPaths={tabPaths}
+                navigate={navigate}
+            />
 
             {/* Main Content Area */}
             <main
@@ -36,35 +46,52 @@ function AppContent() {
                 tabIndex={-1}
                 className="isolate flex min-h-0 flex-1 flex-col overflow-hidden"
             >
-                {activeNavTab === "workspace" &&
-                    (activeAssignment.kind === "code" ? (
+                {route.page === "workspace" &&
+                    (route.assignment.kind === "code" ? (
                         <ProblemWorkspace
-                            key={activeAssignment.id}
-                            problem={activeAssignment}
+                            key={route.assignment.id}
+                            problem={route.assignment}
                         />
                     ) : (
                         <PointersAssignmentView
-                            key={activeAssignment.id}
-                            assignment={activeAssignment}
+                            key={route.assignment.id}
+                            assignment={route.assignment}
                             onSelectAssignment={handleSelectAssignment}
-                            onBack={() => setActiveNavTab("assignments")}
+                            onBack={() => navigate(tabPaths.assignments)}
                         />
                     ))}
 
-                {activeNavTab === "assignments" && (
+                {route.page === "assignments" && (
                     <ProblemListView
                         problems={ASSIGNMENTS}
                         submissions={submissions}
-                        onSelectProblem={handleSelectAssignment}
+                        navigate={navigate}
                     />
                 )}
 
-                {activeNavTab === "submissions" && (
+                {route.page === "submissions" && (
                     <GlobalSubmissionsView
                         submissions={submissions}
                         problems={MOCK_PROBLEMS}
                         onSelectProblem={handleSelectAssignment}
                     />
+                )}
+
+                {route.page === "not-found" && (
+                    <section className="collection-page">
+                        <div className="collection-inner">
+                            <h1 className="editorial-title text-4xl">
+                                Page not found
+                            </h1>
+                            <AppLink
+                                href={tabPaths.assignments}
+                                navigate={navigate}
+                                className="mt-4 inline-block text-primary underline"
+                            >
+                                Browse assignments
+                            </AppLink>
+                        </div>
+                    </section>
                 )}
             </main>
         </div>
@@ -72,10 +99,11 @@ function AppContent() {
 }
 
 export function App() {
+    const navigation = useAppNavigation()
     return (
-        <WorkspaceProvider>
+        <WorkspaceProvider assignment={navigation.workspaceAssignment}>
             <LearningProvider>
-                <AppContent />
+                <AppContent {...navigation} />
             </LearningProvider>
         </WorkspaceProvider>
     )

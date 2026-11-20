@@ -30,8 +30,8 @@ async function clickAt(page: Page, location: Box) {
 }
 async function openAssignment(page: Page, name: string) {
     await page.goto("/")
-    await page.getByRole("button", { name: "Assignments", exact: true }).click()
-    await page.getByRole("button", { name, exact: true }).click()
+    await page.getByRole("link", { name: "Assignments", exact: true }).click()
+    await page.getByRole("link", { name, exact: true }).click()
     await page.getByRole("heading", { level: 1, name, exact: true }).waitFor()
     await page.evaluate(() => document.fonts.ready)
 }

@@ -1,5 +1,6 @@
 import { Code2, Sun, Moon, User, BookOpen, History } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { AppLink } from "@/components/common/AppLink"
 import { useTheme } from "@/components/theme-provider"
 import {
     DropdownMenu,
@@ -12,8 +13,9 @@ import {
 import type { ActiveNavTab } from "@/types"
 
 interface NavbarProps {
-    activeTab: ActiveNavTab
-    setActiveTab: (tab: ActiveNavTab) => void
+    activeTab?: ActiveNavTab
+    tabPaths: Record<ActiveNavTab, string>
+    navigate: (path: string) => void
 }
 
 const NAV_ITEMS = [
@@ -22,7 +24,7 @@ const NAV_ITEMS = [
     { id: "submissions", label: "Submissions", icon: History },
 ] as const
 
-export function Navbar({ activeTab, setActiveTab }: NavbarProps) {
+export function Navbar({ activeTab, tabPaths, navigate }: NavbarProps) {
     const { resolvedTheme, setTheme } = useTheme()
     const toggleTheme = () =>
         setTheme(resolvedTheme === "dark" ? "light" : "dark")
@@ -30,8 +32,9 @@ export function Navbar({ activeTab, setActiveTab }: NavbarProps) {
     return (
         <header className="z-40 shrink-0 border-b border-border bg-card/80">
             <div className="flex flex-wrap items-center justify-between gap-x-6 px-5 md:px-7">
-                <button
-                    onClick={() => setActiveTab("workspace")}
+                <AppLink
+                    href={tabPaths.workspace}
+                    navigate={navigate}
                     className="flex h-16 items-center gap-2.5 text-foreground"
                     aria-label="Gradcamp home"
                 >
@@ -57,21 +60,22 @@ export function Navbar({ activeTab, setActiveTab }: NavbarProps) {
                     <span className="brand-wordmark">
                         gradcamp<span className="text-primary">.</span>
                     </span>
-                </button>
+                </AppLink>
 
                 <nav
                     aria-label="Main navigation"
                     className="order-3 flex w-full items-center md:order-none md:w-auto md:self-stretch"
                 >
                     {NAV_ITEMS.map(({ id, label }) => (
-                        <button
+                        <AppLink
                             key={id}
-                            onClick={() => setActiveTab(id)}
+                            href={tabPaths[id]}
+                            navigate={navigate}
                             className="nav-link"
                             aria-current={activeTab === id ? "page" : undefined}
                         >
                             {label}
-                        </button>
+                        </AppLink>
                     ))}
                 </nav>
 
@@ -106,7 +110,7 @@ export function Navbar({ activeTab, setActiveTab }: NavbarProps) {
                             {NAV_ITEMS.map(({ id, label, icon: Icon }) => (
                                 <DropdownMenuItem
                                     key={id}
-                                    onClick={() => setActiveTab(id)}
+                                    onClick={() => navigate(tabPaths[id])}
                                 >
                                     <Icon className="size-4" />
                                     {label}

@@ -7,6 +7,8 @@ const result = await Bun.build({
     entrypoints: [new URL("../index.html", import.meta.url).pathname],
     outdir: new URL("../dist", import.meta.url).pathname,
     target: "browser",
+    // Nested assignment URLs still load the generated assets from the site root.
+    publicPath: "/",
     minify: true,
     splitting: true,
     plugins: [tailwind],

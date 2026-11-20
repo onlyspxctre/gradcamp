@@ -72,7 +72,7 @@ Per-test diagnostics are retained in history and rendered as plain text in both 
 
 ### Workspace code layout
 
-- `src/context/WorkspaceContext.tsx` owns the active assignment, per-problem code drafts, submission history, and selected submission ID. `src/lib/workspaceState.ts` defines the state transitions and derives the active code/result; `App.tsx` owns only top-level page navigation and passes the selected code assignment into `ProblemWorkspace.tsx`.
+- `src/lib/appNavigation.ts` resolves page and assignment URLs and handles browser history. `App.tsx` supplies the routed assignment to the workspace provider and renders the matching view. `src/context/WorkspaceContext.tsx` retains per-problem drafts, submission history, and the selected submission ID; `src/lib/workspaceState.ts` defines their transitions.
 - `src/components/problem/CodeEditorPane.tsx` composes the editor pane and owns shared toolbar/context-menu state (language, font size, copy feedback, fullscreen).
 - `src/components/problem/editor/EditorToolbar.tsx` and `EditorContextMenu.tsx` render controls using the same action callbacks.
 - `src/components/problem/editor/CodeEditor.tsx` owns Monaco configuration, theme integration, and its single resize observer.
@@ -80,6 +80,12 @@ Per-test diagnostics are retained in history and rendered as plain text in both 
 - `src/components/submissions/SubmissionResult.tsx` is the shared result renderer for the console and `ProblemLeftPane.tsx`. Its history variant also shows the timestamp, submitted code snapshot, and Back to list action. Both panes receive the same selected submission derived from context history, rather than keeping separate submission objects. `ProblemLeftPane.tsx` owns only whether its history list or detail is visible: Back to list and switching detail tabs do not clear the console result. The shared renderer does not fetch or manage submissions.
 
 Changing assignments clears submission selection but preserves code drafts and history. A submission that completes after navigation is always recorded, but is selected only if its code assignment is still active. `tests/workspace.test.ts` covers these transitions; `e2e/workspace-state.spec.ts` covers shared pane selection, Back to list, and completion after code/lecture/quiz navigation.
+
+## Navigation
+
+The catalog lives at `/assignments`, individual assignments at `/assignments/<slug>`, and global submission history at `/submissions`. `/` still opens Add Two Integers. Back/Forward restores the page or assignment, and the Workspace link reopens the last assignment visited in the current session. Drafts and submission history survive in-app navigation, not a full reload. Editor panes and individual lecture or quiz steps are not separate routes.
+
+Bun serves the frontend for these paths in development and preview. If deploying `dist/` to a static host, configure an `index.html` fallback for frontend navigation paths and keep `/upload` and `/fetch` on the API proxy.
 
 ## Assignment types
 

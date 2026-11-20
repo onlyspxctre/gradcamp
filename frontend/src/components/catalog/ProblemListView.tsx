@@ -4,18 +4,20 @@ import { ASSIGNMENT_KIND_LABELS } from "@/data/assignments"
 import { useLearning } from "@/context/LearningContext"
 import { isQuizComplete } from "@/lib/learningProgress"
 import { DifficultyBadge } from "@/components/common/StatusBadges"
+import { AppLink } from "@/components/common/AppLink"
+import { assignmentPath } from "@/lib/appNavigation"
 import { Search, CheckCircle2, Clock, ArrowUpRight } from "lucide-react"
 
 interface ProblemListViewProps {
     problems: Assignment[]
     submissions: Submission[]
-    onSelectProblem: (problem: Assignment) => void
+    navigate: (path: string) => void
 }
 
 export function ProblemListView({
     problems,
     submissions,
-    onSelectProblem,
+    navigate,
 }: ProblemListViewProps) {
     const { progress } = useLearning()
     const [selectedKind, setSelectedKind] = useState<
@@ -211,15 +213,14 @@ export function ProblemListView({
                                                 ).padStart(2, "0")}
                                             </td>
                                             <td>
-                                                <button
-                                                    onClick={() =>
-                                                        onSelectProblem(problem)
-                                                    }
+                                                <AppLink
+                                                    href={assignmentPath(problem)}
+                                                    navigate={navigate}
                                                     className="flex items-center gap-3 text-left font-medium text-foreground transition-colors hover:text-primary"
                                                 >
                                                     {problem.title}
                                                     <ArrowUpRight className="size-3.5 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
-                                                </button>
+                                                </AppLink>
                                                 <span className="mt-1.5 inline-block rounded-sm bg-secondary/70 px-1.5 py-0.5 text-[10px] font-normal text-secondary-foreground">
                                                     {
                                                         ASSIGNMENT_KIND_LABELS[

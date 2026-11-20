@@ -164,7 +164,7 @@ for (const scenario of [
         ).toBeVisible()
         await page
             .getByRole("navigation", { name: "Main navigation" })
-            .getByRole("button", { name: "Submissions", exact: true })
+            .getByRole("link", { name: "Submissions", exact: true })
             .click()
         const rows = page.getByRole("table").locator("tbody tr")
         await expect(rows).toHaveCount(1)
