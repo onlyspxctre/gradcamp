@@ -24,7 +24,7 @@ const examples: Problem["examples"] = [
 export const LARGEST_OF_THREE: Problem = {
     kind: "code",
     id: "1",
-    numericId: 4,
+    numericId: 2,
     title: "Largest of Three",
     slug: "largest-of-three",
     difficulty: "Easy",

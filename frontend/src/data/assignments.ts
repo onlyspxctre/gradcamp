@@ -3,7 +3,7 @@ import { MOCK_PROBLEMS } from "./mockProblems"
 
 export const POINTERS_LECTURE: LearningAssignment = {
     id: "pointers-lecture",
-    numericId: 2,
+    numericId: 5,
     kind: "lecture",
     contentId: "pointers",
     title: "Pointers: the basics",
@@ -17,7 +17,7 @@ export const POINTERS_LECTURE: LearningAssignment = {
 
 export const POINTERS_QUIZ: LearningAssignment = {
     id: "pointers-quiz",
-    numericId: 3,
+    numericId: 6,
     kind: "quiz",
     contentId: "pointers",
     title: "Pointers: memory lab",
@@ -33,7 +33,7 @@ export const ASSIGNMENTS: Assignment[] = [
     ...MOCK_PROBLEMS,
     POINTERS_LECTURE,
     POINTERS_QUIZ,
-]
+].sort((a, b) => a.numericId - b.numericId)
 export const ASSIGNMENT_KIND_LABELS = {
     code: "Code",
     lecture: "Lecture",

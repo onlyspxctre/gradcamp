@@ -16,6 +16,7 @@ static inline const struct grading_question *find_grading_question(const char *i
         {"1", "0000-0001-largest-of-three"},
         {"2", "0000-0002-count-digits"},
         {"3", "0000-0003-count-occurrences"},
+        {"4", "0000-0004-swap-two-integers"},
     };
 
     if (!id) return NULL;

@@ -24,7 +24,7 @@ const examples: Problem["examples"] = [
 export const COUNT_DIGITS: Problem = {
     kind: "code",
     id: "2",
-    numericId: 5,
+    numericId: 3,
     title: "Count Digits",
     slug: "count-digits",
     difficulty: "Easy",

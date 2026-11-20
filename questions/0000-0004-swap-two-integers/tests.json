@@ -1,0 +1,8 @@
+[
+    { "name": "Two positive values", "args": ["3", "8"], "expected": "8 3" },
+    { "name": "Negative and zero", "args": ["-5", "0"], "expected": "0 -5" },
+    { "name": "Equal values", "args": ["4", "4"], "expected": "4 4" },
+    { "name": "Two negative values", "args": ["-2", "-9"], "expected": "-9 -2" },
+    { "name": "Zero first", "args": ["0", "6"], "expected": "6 0" },
+    { "name": "Opposite bounds", "args": ["1000", "-1000"], "expected": "-1000 1000" }
+]

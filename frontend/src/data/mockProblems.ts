@@ -2,6 +2,7 @@ import type { Problem } from "@/types"
 import { COUNT_DIGITS } from "./problems/countDigits"
 import { COUNT_OCCURRENCES } from "./problems/countOccurrences"
 import { LARGEST_OF_THREE } from "./problems/largestOfThree"
+import { SWAP_TWO_INTEGERS } from "./problems/swapTwoIntegers"
 
 export const DEMO_PROBLEM: Problem = {
     kind: "code",
@@ -69,4 +70,5 @@ export const MOCK_PROBLEMS: Problem[] = [
     LARGEST_OF_THREE,
     COUNT_DIGITS,
     COUNT_OCCURRENCES,
+    SWAP_TWO_INTEGERS,
 ]
