@@ -8,10 +8,8 @@ cd "$ROOT_DIR"
 BACKEND_BIN="$ROOT_DIR/build/backend"
 WORKER_BIN="$ROOT_DIR/build/worker"
 
-if [[ ! -x "$BACKEND_BIN" || ! -x "$WORKER_BIN" ]]; then
-    echo "Binaries not found. Running make to compile backend and worker..."
-    make
-fi
+# Let make rebuild missing or stale binaries before starting services.
+make
 
 BACKEND_PID=""
 WORKER_PID=""

@@ -14,7 +14,7 @@ A question directory supplies `driver.c` (the adapter that calls the student's f
 
 Each test has a `name`, an `args` array of strings passed to the driver as separate command-line arguments, and an `expected` string compared to stdout after stripping trailing spaces and line endings. The evaluator accepts up to 64 cases and 32 arguments per case in a 64 KiB file. The existing 3-second per-test and 30-second executor limits still apply, so keep the suite within the overall budget. The read-only mount prevents edits, not reads by code inside the same sandbox.
 
-Rebuild the images with `./build_images.sh` and the worker with `make worker` before running this version. No per-question evaluator build is needed. The worker still routes all submissions to Add Two Integers. Run the native evaluator tests with `python3 evaluator/tests/test_evaluator.py` (requires a C compiler and `yyjson` development files).
+Run `./build_images.sh` before first use and after changing an image's Dockerfile, `compile.sh`, or the shared evaluator source. Use the same user account that runs the worker, since rootless Podman images are stored per user. `./start_dev.sh` checks the native binaries with `make` but does not rebuild images. No per-question evaluator build is needed. The worker still routes all submissions to Add Two Integers. Run the native evaluator tests with `python3 evaluator/tests/test_evaluator.py` (requires a C compiler and `yyjson` development files).
 
 ## JavaScript tooling
 

@@ -1,6 +1,6 @@
 .PHONY: all clean
 
-OBJDIR ?= $(abspath ./obj)
+OBJDIR ?= $(abspath ../obj)
 
 LIBS := hiredis
 
@@ -11,7 +11,7 @@ LDLIBS := $(shell pkg-config --libs $(LIBS)) -lm
 
 all: $(OBJDIR)/hiredis_client.o
 
-$(OBJDIR)/hiredis_client.o: $(CURDIR)/hiredis_client.c
+$(OBJDIR)/hiredis_client.o: $(CURDIR)/hiredis_client.c $(CURDIR)/hiredis_client.h
 	mkdir -p $(OBJDIR)
 	$(CC) $(CFLAGS) -c -o $@ $<
 
