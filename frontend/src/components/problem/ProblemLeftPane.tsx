@@ -155,8 +155,9 @@ export function ProblemLeftPane({
                                 ))}
                         </div>
                         {/* Interactive Execution Slideshow (For Add Two Integers) */}
-                        {(problem.slug === "add-two-integers" ||
-                            problem.id === "1") && <AddTwoIntegersVisualizer />}
+                        {problem.slug === "add-two-integers" && (
+                            <AddTwoIntegersVisualizer />
+                        )}
 
                         {/* Examples Section */}
                         <div className="space-y-4 pt-2">

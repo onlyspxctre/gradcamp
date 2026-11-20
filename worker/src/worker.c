@@ -17,6 +17,7 @@
 #include <yyjson.h>
 
 #include "common/hiredis_client.h"
+#include "common/questions.h"
 
 static int valid_job_id(const char *id) {
     if (!id) return 0;
@@ -169,11 +170,11 @@ static int mark_job_failed(const char *id, const char *message) {
     return failed;
 }
 
-static void executor(const char *id, const char *question_id, char *container_name) {
+static void executor(const char *id, const char *question_dir, char *container_name) {
     char bin_mount[256], out_mount[256], tests_mount[256];
     snprintf(bin_mount, sizeof(bin_mount), "type=bind,src=./job/%s/bin,dst=/workspace/bin,ro,relabel=private", id);
     snprintf(out_mount, sizeof(out_mount), "type=bind,src=./job/%s/out,dst=/workspace/out,rw,relabel=private", id);
-    snprintf(tests_mount, sizeof(tests_mount), "type=bind,src=./questions/%s/tests.json,dst=/workspace/tests.json,ro,relabel=shared", question_id);
+    snprintf(tests_mount, sizeof(tests_mount), "type=bind,src=./questions/%s/tests.json,dst=/workspace/tests.json,ro,relabel=shared", question_dir);
 
     char *args[] = {
         "podman",
@@ -209,11 +210,11 @@ static void executor(const char *id, const char *question_id, char *container_na
     exit(1);
 }
 
-static void compiler(const char *id, const char *question_id, char *container_name) {
+static void compiler(const char *id, const char *question_dir, char *container_name) {
     char src_mount[256], bin_mount[256], driver_mount[256];
     snprintf(src_mount, sizeof(src_mount), "type=bind,src=./job/%s/src,dst=/workspace/src,ro,relabel=private", id);
     snprintf(bin_mount, sizeof(bin_mount), "type=bind,src=./job/%s/bin,dst=/workspace/bin,rw,relabel=private", id);
-    snprintf(driver_mount, sizeof(driver_mount), "type=bind,src=./questions/%s/driver.c,dst=/workspace/driver/driver.c,ro,relabel=shared", question_id);
+    snprintf(driver_mount, sizeof(driver_mount), "type=bind,src=./questions/%s/driver.c,dst=/workspace/driver/driver.c,ro,relabel=shared", question_dir);
 
     char *args[] = {
         "podman",
@@ -249,7 +250,7 @@ static void compiler(const char *id, const char *question_id, char *container_na
     exit(1);
 }
 
-static void job(const char *id, const char *question_id) {
+static void job(const char *id, const char *question_dir) {
     // 1. Ensure scratch directories exist
     if (ensure_job_dirs(id) != 0) {
         fprintf(stderr, "Failed to create directory structure for job %s\n", id);
@@ -302,7 +303,7 @@ static void job(const char *id, const char *question_id) {
         mark_job_failed(id, "Compiler process fork failed");
         return;
     } else if (pid == 0) {
-        compiler(id, question_id, containers.compiler);
+        compiler(id, question_dir, containers.compiler);
     }
 
     int status = 0;
@@ -341,7 +342,7 @@ static void job(const char *id, const char *question_id) {
         mark_job_failed(id, "Runner process fork failed");
         return;
     } else if (pid == 0) {
-        executor(id, question_id, containers.executor);
+        executor(id, question_dir, containers.executor);
     }
 
     switch (wait_for_exit(pid, 30 * 1000, &status)) {
@@ -436,7 +437,7 @@ int main(void) {
         yyjson_val *res_json_uuid = res_json_root ? yyjson_obj_get(res_json_root, "uuid") : NULL;
         const char *res_json_uuid_str = yyjson_get_str(res_json_uuid);
 
-        if (!res_json_uuid_str || !valid_job_id(res_json_uuid_str)) {
+        if (!valid_job_id(res_json_uuid_str) || strlen(res_json_uuid_str) != yyjson_get_len(res_json_uuid)) {
             if (res_json) yyjson_doc_free(res_json);
             freeReplyObject(res);
             continue;
@@ -446,10 +447,19 @@ int main(void) {
         strncpy(job_id, res_json_uuid_str, sizeof(job_id) - 1);
         job_id[sizeof(job_id) - 1] = '\0';
 
+        yyjson_val *question_id = yyjson_obj_get(res_json_root, "question");
+        const struct grading_question *question = find_grading_question(yyjson_get_str(question_id), yyjson_get_len(question_id));
+
         yyjson_doc_free(res_json);
         freeReplyObject(res);
 
-        printf("Dequeued job: %s\n", job_id);
+        if (!question) {
+            fprintf(stderr, "Job %s has a missing or unknown question ID\n", job_id);
+            mark_job_failed(job_id, "Missing or unknown question ID");
+            continue;
+        }
+
+        printf("Dequeued job: %s (question %s)\n", job_id, question->id);
 
         redisReply *update_reply = gradcamp_redis_run_cmd("HSET job:%s status inprogress", job_id);
         if (update_reply) freeReplyObject(update_reply);
@@ -462,7 +472,7 @@ int main(void) {
             signal(SIGCHLD, SIG_DFL);
             gradcamp_redis_free();
             if (gradcamp_redis_init() == 0) {
-                job(job_id, "0000-0000-add-two-integers"); // TODO: currently only supports one question for now, this is a major point of issue to fix
+                job(job_id, question->directory);
                 gradcamp_redis_free();
             }
             exit(0);

@@ -2,7 +2,7 @@ import type { Problem } from "@/types"
 
 export const DEMO_PROBLEM: Problem = {
     kind: "code",
-    id: "1",
+    id: "0",
     numericId: 1,
     title: "Add Two Integers",
     slug: "add-two-integers",

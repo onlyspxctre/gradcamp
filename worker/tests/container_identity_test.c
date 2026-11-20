@@ -64,13 +64,13 @@ static void check_name(const char *name, const char *prefix) {
 }
 
 static void check_stage(void (*stage)(const char *, const char *, char *),
-                        char *name, const char *image) {
+                        const char *question_dir, char *name, const char *image) {
     expected_name = name;
     expected_image = image;
     pid_t pid = fork();
     assert(pid >= 0);
     if (pid == 0) {
-        stage("same-client-job", "0000-0000-add-two-integers", name);
+        stage("same-client-job", question_dir, name);
         _exit(1);
     }
     int status = 0;
@@ -94,8 +94,13 @@ int main(void) {
     assert(strcmp(first.compiler + strlen("gradcamp-compile-"),
                   first.executor + strlen("gradcamp-exec-")) == 0);
 
-    check_stage(compiler, first.compiler, "compiler:latest");
-    check_stage(executor, first.executor, "executor:latest");
+    const struct grading_question *question = find_grading_question("0", 1);
+    assert(question);
+    assert(find_grading_question(NULL, 0) == NULL);
+    assert(find_grading_question("99", 2) == NULL);
+    assert(find_grading_question("0\0x", 3) == NULL);
+    check_stage(compiler, question->directory, first.compiler, "compiler:latest");
+    check_stage(executor, question->directory, first.executor, "executor:latest");
 
     fail_entropy = true;
     assert(make_container_names(&second) == -1);

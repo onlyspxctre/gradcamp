@@ -31,6 +31,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 
 DEFAULT_URL = "http://localhost:3000"
+ADD_TWO_INTEGERS_ID = "0"
 DEFAULT_POLL_INTERVAL_MS = 25.0
 DEFAULT_TIMEOUT_SEC = 30.0
 
@@ -144,7 +145,7 @@ def run_single_submission(
     timeout_sec: float
 ) -> Dict[str, Any]:
     job_id = uuid.uuid4().hex[:16]
-    upload_url = f"{base_url}/upload?job={job_id}"
+    upload_url = f"{base_url}/upload?job={job_id}&question={ADD_TWO_INTEGERS_ID}"
     fetch_url = f"{base_url}/fetch?job={job_id}"
 
     # 1. Measure Upload Phase

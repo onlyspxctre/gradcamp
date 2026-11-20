@@ -41,7 +41,7 @@ test("backend proxy preserves upload query, body, headers, and response status",
         async (url, init) => {
             const forwarded = new Request(url, init)
             expect(forwarded.url).toBe(
-                "http://localhost:3000/upload?job=example%20id"
+                "http://localhost:3000/upload?job=example%20id&question=0"
             )
             expect(forwarded.method).toBe("POST")
             expect(forwarded.headers.get("host")).toBe("localhost:3000")
@@ -56,7 +56,7 @@ test("backend proxy preserves upload query, body, headers, and response status",
     )
 
     const response = await proxyBackend(
-        new Request("http://localhost:5173/upload?job=example%20id", {
+        new Request("http://localhost:5173/upload?job=example%20id&question=0", {
             method: "POST",
             headers: { "content-type": "text/plain", host: "localhost:5173" },
             body: "int main(void) { return 0; }",

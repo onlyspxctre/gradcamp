@@ -15,6 +15,8 @@ for (const scenario of [
         })
         await page.route("**/upload?job=*", async (route) => {
             expect(route.request().method()).toBe("POST")
+            const url = new URL(route.request().url())
+            expect(url.searchParams.get("question")).toBe("0")
             uploads.push(route.request().postData() ?? "")
             await route.fulfill({ status: 200, body: "OK" })
         })

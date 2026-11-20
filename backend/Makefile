@@ -14,12 +14,12 @@ LIBS := hiredis yyjson
 CC := clang
 CFLAGS += -isystem$(INCLUDEDIR) -I../ $(shell pkg-config --cflags $(LIBS))
 COMMON_OBJ := $(OBJDIR)/hiredis_client.o
-COMMON_HDR := $(abspath ../common/hiredis_client.h)
+COMMON_HDRS := $(abspath ../common/hiredis_client.h ../common/questions.h)
 LDLIBS := $(COMMON_OBJ) $(shell pkg-config --libs $(LIBS)) -lm
 
 all: $(BUILDDIR)/backend
 
-$(BUILDDIR)/backend: $(SRCDIR)/backend.c $(INCLUDEDIR)/fio-stl.h $(COMMON_HDR) $(COMMON_OBJ)
+$(BUILDDIR)/backend: $(SRCDIR)/backend.c $(INCLUDEDIR)/fio-stl.h $(COMMON_HDRS) $(COMMON_OBJ)
 	mkdir -p $(BUILDDIR)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $< $(LDLIBS)
 

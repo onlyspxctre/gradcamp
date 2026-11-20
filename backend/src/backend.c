@@ -14,6 +14,7 @@
 #include <ctype.h>
 
 #include "common/hiredis_client.h"
+#include "common/questions.h"
 
 #define fio_string_from_cstr(lit) .buf = "" lit "", .len = sizeof(lit) - 1
 
@@ -220,11 +221,14 @@ void on_upload(fio_http_s *h) {
 
     fio_str_info_s query = fio_http_query(h);
     fio_buf_info_s job_buf = {0};
+    fio_buf_info_s question_buf = {0};
 
     if (query.len) {
         FIO_URL_QUERY_EACH(FIO_STR2BUF_INFO(query), i) {
             if (FIO_BUF_INFO_IS_EQ(i.name, FIO_BUF_INFO1("job"))) {
                 job_buf = i.value;
+            } else if (FIO_BUF_INFO_IS_EQ(i.name, FIO_BUF_INFO1("question"))) {
+                question_buf = i.value;
             }
         }
     }
@@ -238,6 +242,13 @@ void on_upload(fio_http_s *h) {
     if (!valid_job_id(job_buf.buf, job_buf.len)) {
         fio_http_status_set(h, 400);
         fio_http_write(h, fio_string_from_cstr("Invalid job ID!"), .finish = 1);
+        return;
+    }
+
+    const struct grading_question *question = find_grading_question(question_buf.buf, question_buf.len);
+    if (!question) {
+        fio_http_status_set(h, 400);
+        fio_http_write(h, fio_string_from_cstr("Missing or unknown question ID\n"), .finish = 1);
         return;
     }
 
@@ -259,7 +270,9 @@ void on_upload(fio_http_s *h) {
     freeReplyObject(reply);
 
     char queue_payload[256];
-    int payload_len = snprintf(queue_payload, sizeof(queue_payload), "{\"uuid\":\"%.*s\"}", (int)job_buf.len, job_buf.buf);
+    int payload_len = snprintf(queue_payload, sizeof(queue_payload),
+                               "{\"uuid\":\"%.*s\",\"question\":\"%s\"}",
+                               (int)job_buf.len, job_buf.buf, question->id);
     if (payload_len < 0 || (size_t)payload_len >= sizeof(queue_payload)) {
         fio_http_status_set(h, 500);
         fio_http_write(h, fio_string_from_cstr("Failed to serialize queue payload!\n"), .finish = 1);

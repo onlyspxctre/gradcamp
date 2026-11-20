@@ -3,11 +3,14 @@ import assert from "node:assert/strict"
 import { submitToBackendQueue } from "../src/services/judgeService.ts"
 
 async function submitWithPollResponses(...bodies: string[]) {
+    const problemId = "42"
     const originalFetch = globalThis.fetch
     let uploads = 0
     globalThis.fetch = async (input, options) => {
         if (String(input).startsWith("/upload?job=")) {
             uploads++
+            const url = new URL(String(input), "http://localhost")
+            assert.equal(url.searchParams.get("question"), problemId)
             assert.equal(options?.method, "POST")
             assert.equal(
                 options?.body,
@@ -24,7 +27,7 @@ async function submitWithPollResponses(...bodies: string[]) {
     }
     try {
         const result = await submitToBackendQueue({
-            problemId: "1",
+            problemId,
             problemTitle: "Add Two Integers",
             code: "int add(int a, int b) { return a + b; }",
         })

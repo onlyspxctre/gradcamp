@@ -26,10 +26,15 @@ export async function submitToBackendQueue(
         second: "2-digit",
     })
 
-    onStatusChange?.("Pending", `Uploading source to /upload?job=${jobId}...`)
+    const uploadQuery = new URLSearchParams({
+        job: jobId,
+        question: problemId,
+    })
+    const uploadUrl = `/upload?${uploadQuery}`
+    onStatusChange?.("Pending", `Uploading source to ${uploadUrl}...`)
 
     try {
-        const uploadRes = await fetch(`/upload?job=${jobId}`, {
+        const uploadRes = await fetch(uploadUrl, {
             method: "POST",
             body: code,
             headers: {
