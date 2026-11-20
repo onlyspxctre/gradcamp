@@ -21,7 +21,7 @@ When a submission is tested, `benchmark.py` breaks the end-to-end execution down
                                        │
                                        │  3. Container & MicroVM Lifecycle
                                        ├─► podman run compiler:latest (compile.sh)
-                                       └─► podman run executor:latest (executor.sh -> evaluator)
+                                       └─► podman run executor:latest (evaluator reads tests.json)
                                        │
                                        ▼
  [ benchmark.py ] ◄── GET /fetch ── [ backend (Redis results) ]
@@ -40,7 +40,7 @@ When a submission is tested, `benchmark.py` breaks the end-to-end execution down
 
 3. **Container & MicroVM Execution (`execution_ms`)**:
    - Time elapsed from `inprogress` until the worker writes results and marks the job `completed`.
-   - Measures the sequential cold-boot and execution lifecycle of `compiler:latest` and `executor:latest`; `executor.sh` launches the question's precompiled evaluator.
+   - Measures the sequential cold-boot and execution lifecycle of `compiler:latest` and `executor:latest`; the executor image runs a shared evaluator with the question's `tests.json`.
 
 4. **Total End-to-End Latency (`total_e2e_ms`)**:
    - Total wall-clock time from the initial HTTP upload request to the final result retrieval.

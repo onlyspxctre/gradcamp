@@ -34,6 +34,7 @@ static int test_execvp(const char *file, char *const argv[]) {
     assert(strcmp(file, "podman") == 0);
     assert(strcmp(argv[1], "run") == 0);
     int names = 0;
+    int tests_mounts = 0;
     bool auto_remove = false;
     size_t argc = 0;
     for (; argv[argc]; ++argc) {
@@ -43,8 +44,13 @@ static int test_execvp(const char *file, char *const argv[]) {
             ++names;
         }
         if (strcmp(argv[argc], "--rm") == 0) auto_remove = true;
+        if (strcmp(argv[argc], "--mount") == 0 && argv[argc + 1] &&
+            strcmp(argv[argc + 1], "type=bind,src=./questions/0000-0000-add-two-integers/tests.json,dst=/workspace/tests.json,ro,relabel=shared") == 0) {
+            ++tests_mounts;
+        }
     }
     assert(names == 1);
+    assert(tests_mounts == (strcmp(expected_image, "executor:latest") == 0));
     assert(auto_remove);
     assert(strcmp(argv[argc - 1], expected_image) == 0);
     _exit(0);

@@ -1,3 +1,9 @@
+FROM alpine:edge AS builder
+
+RUN apk add --no-cache build-base pkgconf yyjson-dev yyjson-static
+COPY evaluator/evaluator.c /src/evaluator.c
+RUN gcc -static -O2 -Wall -Wextra -o /evaluator /src/evaluator.c $(pkg-config --cflags --libs yyjson)
+
 FROM alpine:edge
 
 RUN rm -rf /sbin/apk /etc/apk /lib/apk /var/cache/apk/*
@@ -6,22 +12,15 @@ RUN rm -rf /sbin/apk /etc/apk /lib/apk /var/cache/apk/*
 RUN find / -perm /6000 -type f -exec chmod a-s {} + 2>/dev/null || true
 
 RUN adduser -D -u 1000 -s /bin/sh evaluator && \
-    mkdir -p /workspace/bin /workspace/tests /workspace/out && \
-    chown -R evaluator:evaluator /workspace/tests /workspace/out && \
-    chmod 0700 /workspace/tests /workspace/out
+    mkdir -p /workspace/bin /workspace/out && \
+    chown evaluator:evaluator /workspace/out && \
+    chmod 0700 /workspace/out
 
-COPY executor.sh /usr/local/bin/executor.sh
-RUN chmod 0755 /usr/local/bin/executor.sh
+COPY --from=builder /evaluator /usr/local/bin/evaluator
 
 # Run as the unprivileged evaluator user
 USER evaluator
 WORKDIR /workspace
 
-ENV TMPDIR=/tmp \
-    BIN_PATH=/workspace/evaluator \
-    TESTS_DIR=/workspace/tests \
-    TIMEOUT_SEC=2 \
-    MAX_OUTPUT_BYTES=1048576 \
-    RESULTS_FILE=/tmp/results.json
-
-ENTRYPOINT ["/usr/local/bin/executor.sh"]
+ENTRYPOINT ["/usr/local/bin/evaluator"]
+CMD ["/workspace/tests.json", "/workspace/out/results.json"]

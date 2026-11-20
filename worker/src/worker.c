@@ -170,10 +170,10 @@ static int mark_job_failed(const char *id, const char *message) {
 }
 
 static void executor(const char *id, const char *question_id, char *container_name) {
-    char bin_mount[256], out_mount[256], eval_mount[256];
+    char bin_mount[256], out_mount[256], tests_mount[256];
     snprintf(bin_mount, sizeof(bin_mount), "type=bind,src=./job/%s/bin,dst=/workspace/bin,ro,relabel=private", id);
     snprintf(out_mount, sizeof(out_mount), "type=bind,src=./job/%s/out,dst=/workspace/out,rw,relabel=private", id);
-    snprintf(eval_mount, sizeof(eval_mount), "type=bind,src=./questions/%s/evaluator,dst=/workspace/evaluator,ro,relabel=shared", question_id);
+    snprintf(tests_mount, sizeof(tests_mount), "type=bind,src=./questions/%s/tests.json,dst=/workspace/tests.json,ro,relabel=shared", question_id);
 
     char *args[] = {
         "podman",
@@ -196,11 +196,9 @@ static void executor(const char *id, const char *question_id, char *container_na
         "--mount",
         out_mount,
         "--mount",
-        eval_mount,
+        tests_mount,
         "--name",
         container_name,
-        "-e",
-        "RESULTS_FILE=/workspace/out/results.json",
         "--userns=keep-id",
         "executor:latest",
         NULL,

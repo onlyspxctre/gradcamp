@@ -17,18 +17,93 @@
 #include <unistd.h>
 #include <yyjson.h>
 
+#ifndef STUDENT_BIN
 #define STUDENT_BIN "/workspace/bin/driver"
-#define DEFAULT_OUT "/workspace/out/results.json"
+#endif
 
 #define TIMEOUT_SECONDS 3
 #define TIMEOUT_MS (TIMEOUT_SECONDS * 1000)
 #define MAX_OUTPUT_BYTES 4096
+#define MAX_CONFIG_BYTES (64 * 1024)
+#define MAX_TESTS 64
+#define MAX_ARGS 32
 
 typedef struct {
     const char *name;
-    char *const argv[5];  // e.g. {"main", "12", "5", NULL}
-    const char *expected; // e.g. "17"
+    char *argv[MAX_ARGS + 2]; // Driver path, arguments, and NULL.
+    const char *expected;
 } TestCase;
+
+static const char *get_c_string(yyjson_val *value) {
+    const char *str = yyjson_get_str(value);
+    if (!str || memchr(str, '\0', yyjson_get_len(value))) return NULL;
+    return str;
+}
+
+// Validate the whole suite before starting a driver. Strings are borrowed
+// from the returned document, which must outlive the tests and result writer.
+static yyjson_doc *load_tests(const char *path, TestCase tests[MAX_TESTS], size_t *count) {
+    FILE *file = fopen(path, "rb");
+    if (!file) {
+        perror(path);
+        return NULL;
+    }
+
+    char input[MAX_CONFIG_BYTES + 1];
+    size_t len = fread(input, 1, sizeof(input), file);
+    bool read_failed = ferror(file);
+    fclose(file);
+    if (read_failed || len > MAX_CONFIG_BYTES) {
+        fprintf(stderr, "%s: read error or test file exceeds %d bytes\n", path, MAX_CONFIG_BYTES);
+        return NULL;
+    }
+
+    yyjson_read_err err;
+    yyjson_doc *doc = yyjson_read_opts(input, len, 0, NULL, &err);
+    if (!doc) {
+        fprintf(stderr, "%s: invalid JSON at byte %zu: %s\n", path, err.pos, err.msg);
+        return NULL;
+    }
+
+    yyjson_val *root = yyjson_doc_get_root(doc);
+    *count = yyjson_arr_size(root);
+    if (*count == 0 || *count > MAX_TESTS) {
+        fprintf(stderr, "%s: expected an array of 1 to %d test cases\n", path, MAX_TESTS);
+        goto invalid;
+    }
+
+    for (size_t i = 0; i < *count; ++i) {
+        yyjson_val *entry = yyjson_arr_get(root, i);
+        yyjson_val *args = yyjson_obj_get(entry, "args");
+        const char *name = get_c_string(yyjson_obj_get(entry, "name"));
+        const char *expected = get_c_string(yyjson_obj_get(entry, "expected"));
+        size_t argc = yyjson_arr_size(args);
+        if (!name || !*name || !expected || strlen(expected) > MAX_OUTPUT_BYTES ||
+            !yyjson_is_arr(args) || argc > MAX_ARGS) {
+            fprintf(stderr, "%s: invalid name, args, or expected output in test %zu\n", path, i + 1);
+            goto invalid;
+        }
+
+        tests[i].name = name;
+        tests[i].expected = expected;
+        tests[i].argv[0] = STUDENT_BIN;
+        for (size_t j = 0; j < argc; ++j) {
+            const char *arg = get_c_string(yyjson_arr_get(args, j));
+            if (!arg) {
+                fprintf(stderr, "%s: invalid argument %zu in test %zu\n", path, j + 1, i + 1);
+                goto invalid;
+            }
+            tests[i].argv[j + 1] = (char *) arg; // execv does not modify the strings.
+        }
+        tests[i].argv[argc + 1] = NULL;
+    }
+
+    return doc;
+
+invalid:
+    yyjson_doc_free(doc);
+    return NULL;
+}
 
 // Portable file descriptor sanitation
 static void close_extra_fds(void) {
@@ -94,7 +169,7 @@ static bool terminate_and_reap(pid_t pid, bool reaped) {
 
         int64_t remaining = deadline_ms - now;
         int delay_ms = remaining > 10 ? 10 : (int) remaining;
-        
+
         if (poll(NULL, 0, delay_ms) == -1 && errno != EINTR)
             return false;
     }
@@ -353,36 +428,25 @@ terminate:
 }
 
 int main(int argc, char *argv[]) {
-    const char *out_path = (argc > 1) ? argv[1] : getenv("RESULTS_FILE");
-    if (!out_path) out_path = DEFAULT_OUT;
-
-    // Define test cases (or load dynamically from /workspace/answers/tests.json)
-    TestCase tests[] = {
-        {.name = "Test One (12 + 5 = 17)",
-         .argv = {(char *) STUDENT_BIN, "12", "5", NULL},
-         .expected = "17"},
-        {.name = "Test Two (-10 + 4 = -6)",
-         .argv = {(char *) STUDENT_BIN, "-10", "4", NULL},
-         .expected = "-6"},
-        {.name = "Test Three (0 + 0 = 0)",
-         .argv = {(char *) STUDENT_BIN, "0", "0", NULL},
-         .expected = "0"},
-    };
-    size_t num_tests = sizeof(tests) / sizeof(tests[0]);
-
-    yyjson_mut_doc *json = yyjson_mut_doc_new(NULL);
-    yyjson_mut_val *json_root = json ? yyjson_mut_obj(json) : NULL;
-
-    if (!json || !json_root) {
-        if (json) yyjson_mut_doc_free(json);
-
-        perror("Failed to create yyjson_mut_doc for output.json\n");
-        return -1;
+    if (argc != 3) {
+        fprintf(stderr, "Usage: %s <tests.json> <results.json>\n", argv[0]);
+        return EXIT_FAILURE;
     }
 
-    yyjson_mut_doc_set_root(json, json_root);
+    TestCase tests[MAX_TESTS];
+    size_t num_tests;
+    yyjson_doc *config = load_tests(argv[1], tests, &num_tests);
+    if (!config) return EXIT_FAILURE;
 
-    yyjson_mut_val *json_tests_arr = yyjson_mut_obj_add_arr(json, json_root, "tests");
+    int status = EXIT_FAILURE;
+    yyjson_mut_doc *json = yyjson_mut_doc_new(NULL);
+    yyjson_mut_val *root = json ? yyjson_mut_obj(json) : NULL;
+    yyjson_mut_val *results = root ? yyjson_mut_obj_add_arr(json, root, "tests") : NULL;
+    if (!results) {
+        fprintf(stderr, "Failed to initialize results\n");
+        goto done;
+    }
+    yyjson_mut_doc_set_root(json, root);
 
     char error_msg[256];
     for (size_t i = 0; i < num_tests; ++i) {
@@ -390,44 +454,28 @@ int main(int argc, char *argv[]) {
 
         if (outcome == TEST_ERR) {
             fprintf(stderr, "Server infrastructure failure: %s\n", error_msg);
-            yyjson_mut_doc_free(json);
-            return -1;
+            goto done;
         }
 
-        yyjson_mut_val *entry = yyjson_mut_arr_add_obj(json, json_tests_arr);
-        yyjson_mut_obj_add_str(json, entry, "name", tests[i].name);
-        yyjson_mut_obj_add_bool(json, entry, "passed", outcome == TEST_PASS);
-        yyjson_mut_obj_add_strcpy(json, entry, "error", error_msg);
+        yyjson_mut_val *entry = yyjson_mut_arr_add_obj(json, results);
+        if (!entry || !yyjson_mut_obj_add_str(json, entry, "name", tests[i].name) ||
+            !yyjson_mut_obj_add_bool(json, entry, "passed", outcome == TEST_PASS) ||
+            !yyjson_mut_obj_add_strcpy(json, entry, "error", error_msg)) {
+            fprintf(stderr, "Failed to record result for test %zu\n", i + 1);
+            goto done;
+        }
     }
 
-    size_t len;
-    char *json_str = yyjson_mut_write(json, YYJSON_WRITE_PRETTY, &len);
-    
-    if (!json_str) {
-        yyjson_mut_doc_free(json);
-        perror("Failed to write json to string");
-        return -1;
+    yyjson_write_err err;
+    if (!yyjson_mut_write_file(argv[2], json, YYJSON_WRITE_PRETTY, NULL, &err)) {
+        fprintf(stderr, "%s: %s\n", argv[2], err.msg);
+        goto done;
     }
-
-    FILE *f = fopen(out_path, "w");
-    if (!f) {
-        free(json_str);
-        yyjson_mut_doc_free(json);
-        perror("Failed to open results.json");
-        return -1;
-    }
-
-    if (fwrite(json_str, sizeof(char), len, f) != len) {
-        fclose(f);
-        free(json_str);
-        yyjson_mut_doc_free(json);
-        perror("Failed to write to results.json");
-        return -1;
-    }
-
-    free(json_str);
-    fclose(f);
-    yyjson_mut_doc_free(json);
     printf("Evaluator finished: successfully evaluated %zu tests.\n", num_tests);
-    return 0;
+    status = EXIT_SUCCESS;
+
+done:
+    yyjson_mut_doc_free(json);
+    yyjson_doc_free(config);
+    return status;
 }

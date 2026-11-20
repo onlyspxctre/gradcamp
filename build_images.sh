@@ -19,10 +19,4 @@ echo "=========================================="
 "$CONTAINER_CMD" build -t executor:latest -f Dockerfile.executor .
 
 echo ""
-echo "=========================================="
-echo " Building evalmaker:latest"
-echo "=========================================="
-"$CONTAINER_CMD" build -t evalmaker:latest -f Dockerfile.build-evaluator .
-
-echo ""
 echo "Successfully built Podman images."
