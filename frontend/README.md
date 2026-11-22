@@ -103,6 +103,22 @@ Assignment metadata and format discriminators live in `src/data/assignments.ts` 
 
 Learning navigation uses overlapping CSS grid items to reserve the tallest content and feedback at the current viewport width, rather than hard-coded heights. Inactive items are invisible, inert, and hidden from assistive technology; inactive quiz controls are also disabled. This leaves some extra space on shorter questions but keeps action buttons stationary. Sequential navigation preserves the scroll position; selecting a section/question in the sidebar explicitly reveals it. Quiz question headings receive focus without scrolling on sequential navigation.
 
+## Custom Python exercises (demo)
+
+Open **Assignments → Custom → Create custom exercise**. Enter a title, prompt, function name, and starter code. Configure the positional argument types and return type under **Function signature**. For `add(int, int) -> int`, a case can use `[2, 3]` and expect `5`. Use quotes for strings, `[[2, 3]]` for one list argument, `[]` for no arguments, and `null` for Python `None`.
+
+The form checks the number and types of arguments and the expected return type before saving. The runner checks the actual Python return type before comparing values: `5`, `"5"`, and `True` aren't interchangeable. **Integer** requires a Python `int` return and accepts only safe integer-valued JSON numbers; **Float** requires a `float` return and passes numeric arguments as floats; **Number** allows either Python type. List and object restrictions apply to the outer type, not the types of their elements.
+
+Open a saved exercise to use the same description pane, Monaco editor, test console, and submission history as built-in assignments. Select **Edit exercise** to change the definition or **Submit** to test the current solution. The local grader calls only the named function and compares its return value as JSON. The solution can define any helpers it needs; printed output is diagnostic only. The exercise definition is saved in this browser; drafts and local runs last only while the exercise is open.
+
+To remove a custom exercise, open **Edit exercise → Delete exercise** and confirm. This permanently removes it from this browser without affecting built-in assignments.
+
+Python runs locally in a disposable Web Worker in a sandboxed frame. The runtime (Pyodide) is fetched from a pinned CDN URL on demand; the demo requires access to that CDN and does not provide offline support. A run can be stopped and is capped at eight seconds after the runtime loads. Custom exercises are hidden by default, are not published, and do not use the C grader. This is a local demo, not a service for running third-party submissions.
+
+To exercise the real CDN runtime in Playwright, run `GRADCAMP_LIVE_PYTHON=1 bun run test:e2e -- e2e/custom-python-run.spec.ts --project desktop`.
+
+The demo lives in `src/components/custom-exercises/`. `ProblemListView.tsx` opens it from the Custom filter, and its adapter supplies exercise data and local grading results to the shared coding workspace.
+
 ## Adding shadcn/ui Components
 
 To add more UI components from shadcn:

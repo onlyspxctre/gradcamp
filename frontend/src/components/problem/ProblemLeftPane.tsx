@@ -16,6 +16,7 @@ interface ProblemLeftPaneProps {
     activeTab: ProblemLeftTab
     setActiveTab: (tab: ProblemLeftTab) => void
     onSelectSubmission: (id: string) => void
+    local?: boolean
 }
 
 export function ProblemLeftPane({
@@ -25,6 +26,7 @@ export function ProblemLeftPane({
     activeTab,
     setActiveTab,
     onSelectSubmission,
+    local = false,
 }: ProblemLeftPaneProps) {
     // This controls only list/detail visibility. The context owns the selection,
     // so returning to the list does not clear the result shown in the console.
@@ -223,7 +225,9 @@ export function ProblemLeftPane({
                                 Submission History
                             </h2>
                             <p className="text-xs text-muted-foreground">
-                                Evaluated by backend worker queue
+                                {local
+                                    ? "Evaluated in this browser"
+                                    : "Evaluated by backend worker queue"}
                             </p>
                         </div>
 
@@ -231,6 +235,7 @@ export function ProblemLeftPane({
                             <SubmissionResult
                                 submission={activeSubmission}
                                 variant="history"
+                                local={local}
                                 headerAction={
                                     <Button
                                         variant="ghost"

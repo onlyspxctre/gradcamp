@@ -1,7 +1,13 @@
 import { useId, useState } from "react"
 import type { TestCase } from "@/types"
 
-export function TestCasesPanel({ testCases }: { testCases: TestCase[] }) {
+export function TestCasesPanel({
+    testCases,
+    allowCustomInput = true,
+}: {
+    testCases: TestCase[]
+    allowCustomInput?: boolean
+}) {
     const customInputId = useId()
     const [selectedCaseIndex, setSelectedCaseIndex] = useState(0)
     const [customInput, setCustomInput] = useState("")
@@ -27,16 +33,18 @@ export function TestCasesPanel({ testCases }: { testCases: TestCase[] }) {
                         {testCase.name}
                     </button>
                 ))}
-                <button
-                    onClick={() => setIsCustomCase(true)}
-                    className={`rounded px-2.5 py-1 font-mono text-xs font-medium transition-colors ${
-                        isCustomCase
-                            ? "bg-primary font-semibold text-primary-foreground"
-                            : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground"
-                    }`}
-                >
-                    + Custom
-                </button>
+                {allowCustomInput && (
+                    <button
+                        onClick={() => setIsCustomCase(true)}
+                        className={`rounded px-2.5 py-1 font-mono text-xs font-medium transition-colors ${
+                            isCustomCase
+                                ? "bg-primary font-semibold text-primary-foreground"
+                                : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground"
+                        }`}
+                    >
+                        + Custom
+                    </button>
+                )}
             </div>
             {isCustomCase ? (
                 <div className="space-y-1.5">

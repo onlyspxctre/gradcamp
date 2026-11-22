@@ -5,6 +5,9 @@ import { useLearning } from "@/context/LearningContext"
 import { isQuizComplete } from "@/lib/learningProgress"
 import { DifficultyBadge } from "@/components/common/StatusBadges"
 import { AppLink } from "@/components/common/AppLink"
+import { CustomExercisesPanel } from "@/components/custom-exercises/CustomExercisesPanel"
+import { CustomExerciseWorkspace } from "@/components/custom-exercises/CustomExerciseWorkspace"
+import type { CustomExercise } from "@/components/custom-exercises/customExercises"
 import { assignmentPath } from "@/lib/appNavigation"
 import { Search, CheckCircle2, Clock, ArrowUpRight } from "lucide-react"
 
@@ -21,12 +24,27 @@ export function ProblemListView({
 }: ProblemListViewProps) {
     const { progress } = useLearning()
     const [selectedKind, setSelectedKind] = useState<
-        Assignment["kind"] | "all"
+        Assignment["kind"] | "all" | "custom"
     >("all")
+    const isCustom = selectedKind === "custom"
+    const [customSelection, setCustomSelection] = useState<{
+        exercise: CustomExercise
+        displayNumber: number
+    } | null>(null)
     const [searchQuery, setSearchQuery] = useState("")
     const [selectedDifficulty, setSelectedDifficulty] = useState<
         Difficulty | "All"
     >("All")
+
+    if (customSelection) {
+        return (
+            <CustomExerciseWorkspace
+                initial={customSelection.exercise}
+                displayNumber={customSelection.displayNumber}
+                onBack={() => setCustomSelection(null)}
+            />
+        )
+    }
 
     const filteredProblems = problems.filter((problem) => {
         const matchesSearch =
@@ -113,7 +131,10 @@ export function ProblemListView({
                 </div>
 
                 <div className="mb-5 flex flex-wrap items-center justify-between gap-4">
-                    <div className="flex items-baseline gap-3">
+                    <div
+                        hidden={isCustom}
+                        className="flex items-baseline gap-3"
+                    >
                         <h2 className="font-heading text-2xl tracking-tight">
                             Assignment list
                         </h2>
@@ -134,6 +155,7 @@ export function ProblemListView({
                             />
                         </div>
                         <div
+                            hidden={isCustom}
                             className="flex items-center gap-0.5"
                             role="group"
                             aria-label="Filter by difficulty"
@@ -177,8 +199,28 @@ export function ProblemListView({
                             </button>
                         )
                     )}
+                    <button
+                        type="button"
+                        onClick={() => setSelectedKind("custom")}
+                        className="filter-button"
+                        aria-pressed={isCustom}
+                    >
+                        Custom
+                    </button>
                 </div>
-                <div className="overflow-hidden rounded-lg border border-border bg-card/80">
+                {isCustom && (
+                    <CustomExercisesPanel
+                        searchQuery={searchQuery}
+                        onCreated={() => setSearchQuery("")}
+                        onOpen={(exercise, displayNumber) =>
+                            setCustomSelection({ exercise, displayNumber })
+                        }
+                    />
+                )}
+                <div
+                    hidden={isCustom}
+                    className="overflow-hidden rounded-lg border border-border bg-card/80"
+                >
                     <table className="data-table">
                         <thead>
                             <tr>
@@ -214,7 +256,9 @@ export function ProblemListView({
                                             </td>
                                             <td>
                                                 <AppLink
-                                                    href={assignmentPath(problem)}
+                                                    href={assignmentPath(
+                                                        problem
+                                                    )}
                                                     navigate={navigate}
                                                     className="flex items-center gap-3 text-left font-medium text-foreground transition-colors hover:text-primary"
                                                 >

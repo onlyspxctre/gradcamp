@@ -21,6 +21,7 @@ interface EditorConsoleProps {
     submission: Submission | null
     isSubmitting: boolean
     statusDetail?: string
+    local?: boolean
 }
 
 export function EditorConsole({
@@ -33,6 +34,7 @@ export function EditorConsole({
     submission,
     isSubmitting,
     statusDetail,
+    local = false,
 }: EditorConsoleProps) {
     const bodyRef = useRef<HTMLDivElement>(null)
     const applyHeight = useCallback((height: number) => {
@@ -153,7 +155,10 @@ export function EditorConsole({
                         {/* Keep this mounted so selecting results or collapsing the console
                             does not discard the custom input or selected example. */}
                         <div hidden={tab !== "testcase"}>
-                            <TestCasesPanel testCases={testCases} />
+                            <TestCasesPanel
+                                testCases={testCases}
+                                allowCustomInput={!local}
+                            />
                         </div>
                         {tab === "submission" && (
                             <div className="space-y-3">
@@ -161,15 +166,30 @@ export function EditorConsole({
                                     <div className="flex flex-col items-center justify-center gap-2 py-6 text-center">
                                         <Loader2 className="size-6 animate-spin text-primary" />
                                         <span className="text-sm font-semibold text-foreground">
-                                            Submitting to Backend Worker
+                                            {local
+                                                ? "Running Python in this browser"
+                                                : "Submitting to Backend Worker"}
                                         </span>
-                                        <span className="text-xs text-muted-foreground">
+                                        <span
+                                            role="status"
+                                            className="text-xs text-muted-foreground"
+                                        >
                                             {statusDetail ||
                                                 "Uploading to /upload..."}
                                         </span>
                                     </div>
                                 ) : submission ? (
-                                    <SubmissionResult submission={submission} />
+                                    <SubmissionResult
+                                        submission={submission}
+                                        local={local}
+                                    />
+                                ) : local && statusDetail ? (
+                                    <p
+                                        role="status"
+                                        className="py-4 text-center text-muted-foreground"
+                                    >
+                                        {statusDetail}
+                                    </p>
                                 ) : (
                                     <div className="py-4 text-center text-muted-foreground">
                                         Submit your solution to check it against

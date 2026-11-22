@@ -4,15 +4,31 @@ import {
     useRef,
     useCallback,
     type CSSProperties,
+    type ReactNode,
 } from "react"
 import { ProblemLeftPane } from "./ProblemLeftPane"
 import { CodeEditorPane } from "./CodeEditorPane"
 import { useWorkspace } from "@/context/WorkspaceContext"
 import { GripVertical } from "lucide-react"
 import { usePaneResize } from "@/hooks/usePaneResize"
-import type { Problem, ProblemLeftTab } from "@/types"
+import type { Problem, ProblemLeftTab, SupportedLanguage } from "@/types"
 
 export function ProblemWorkspace({ problem }: { problem: Problem }) {
+    const workspace = useWorkspace()
+    return <CodingWorkspace problem={problem} workspace={workspace} />
+}
+
+export function CodingWorkspace({
+    problem,
+    workspace,
+    headerActions,
+    localRun,
+}: {
+    problem: Problem
+    workspace: ReturnType<typeof useWorkspace>
+    headerActions?: ReactNode
+    localRun?: { language: SupportedLanguage; onStop: () => void }
+}) {
     const {
         code,
         setCode,
@@ -27,7 +43,7 @@ export function ProblemWorkspace({ problem }: { problem: Problem }) {
         isConsoleOpen,
         setIsConsoleOpen,
         submitCode,
-    } = useWorkspace()
+    } = workspace
 
     const [leftTab, setLeftTab] = useState<ProblemLeftTab>("description")
 
@@ -72,22 +88,24 @@ export function ProblemWorkspace({ problem }: { problem: Problem }) {
             aria-label="Coding workspace"
             className="page-enter flex min-h-0 flex-1 flex-col overflow-y-auto px-3 pb-3 md:overflow-hidden md:px-5 md:pb-5"
         >
-            <div className="flex shrink-0 items-center justify-between gap-4 px-1 py-5 md:px-2 md:py-6">
+            <div className="flex shrink-0 flex-wrap items-center justify-between gap-4 px-1 py-5 md:px-2 md:py-6">
                 <div>
                     <h1 className="editorial-title text-[26px] md:text-[30px]">
                         Workspace
                     </h1>
                 </div>
-                <div className="hidden items-center gap-3 text-xs text-muted-foreground sm:flex">
-                    <span
-                        className="h-px w-8 bg-primary/35"
-                        aria-hidden="true"
-                    />
-                    <span>{problem.category}</span>
-                    <span className="font-mono text-[10px]">
-                        / {String(problem.numericId).padStart(2, "0")}
-                    </span>
-                </div>
+                {headerActions ?? (
+                    <div className="hidden items-center gap-3 text-xs text-muted-foreground sm:flex">
+                        <span
+                            className="h-px w-8 bg-primary/35"
+                            aria-hidden="true"
+                        />
+                        <span>{problem.category}</span>
+                        <span className="font-mono text-[10px]">
+                            / {String(problem.numericId).padStart(2, "0")}
+                        </span>
+                    </div>
+                )}
             </div>
             <div
                 ref={containerRef}
@@ -102,6 +120,7 @@ export function ProblemWorkspace({ problem }: { problem: Problem }) {
                         activeSubmission={activeSubmission}
                         activeTab={leftTab}
                         setActiveTab={setLeftTab}
+                        local={Boolean(localRun)}
                         onSelectSubmission={(id) => {
                             selectSubmission(id)
                             setConsoleTab("submission")
@@ -141,6 +160,7 @@ export function ProblemWorkspace({ problem }: { problem: Problem }) {
                 <div className="workspace-panel h-[560px] shrink-0 md:h-full md:flex-1">
                     <CodeEditorPane
                         problem={problem}
+                        localRun={localRun}
                         code={code}
                         setCode={setCode}
                         onSubmitCode={submitCode}

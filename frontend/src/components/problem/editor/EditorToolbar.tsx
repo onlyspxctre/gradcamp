@@ -12,6 +12,7 @@ import type { SupportedLanguage } from "@/types"
 
 interface EditorToolbarProps {
     language: SupportedLanguage
+    fixedLanguage?: boolean
     onLanguageChange: (language: SupportedLanguage) => void
     fontSize: number
     onFontSizeChange: (size: number) => void
@@ -24,6 +25,7 @@ interface EditorToolbarProps {
 
 export function EditorToolbar({
     language,
+    fixedLanguage = false,
     onLanguageChange,
     fontSize,
     onFontSizeChange,
@@ -38,6 +40,7 @@ export function EditorToolbar({
             <div className="flex items-center gap-2">
                 <Select
                     value={language.id}
+                    disabled={fixedLanguage}
                     onValueChange={(id) => {
                         const selected = SUPPORTED_LANGUAGES.find(
                             (item) => item.id === id
@@ -53,11 +56,13 @@ export function EditorToolbar({
                         <SelectValue placeholder="Select Language" />
                     </SelectTrigger>
                     <SelectContent align="start">
-                        {SUPPORTED_LANGUAGES.map((item) => (
-                            <SelectItem key={item.id} value={item.id}>
-                                {item.name}
-                            </SelectItem>
-                        ))}
+                        {(fixedLanguage ? [language] : SUPPORTED_LANGUAGES).map(
+                            (item) => (
+                                <SelectItem key={item.id} value={item.id}>
+                                    {item.name}
+                                </SelectItem>
+                            )
+                        )}
                     </SelectContent>
                 </Select>
                 <span className="hidden font-mono text-[11px] text-muted-foreground sm:inline">

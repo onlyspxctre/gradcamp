@@ -2,7 +2,12 @@ import { useEffect, useRef, useState } from "react"
 import { Send } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { SUPPORTED_LANGUAGES } from "@/data/languages"
-import type { Problem, Submission, ConsoleTab } from "@/types"
+import type {
+    Problem,
+    Submission,
+    ConsoleTab,
+    SupportedLanguage,
+} from "@/types"
 import { CodeEditor } from "./editor/CodeEditor"
 import { EditorConsole } from "./editor/EditorConsole"
 import { EditorContextMenu } from "./editor/EditorContextMenu"
@@ -10,6 +15,7 @@ import { EditorToolbar } from "./editor/EditorToolbar"
 
 interface CodeEditorPaneProps {
     problem: Problem
+    localRun?: { language: SupportedLanguage; onStop: () => void }
     code: string
     setCode: (code: string) => void
     onSubmitCode: () => void
@@ -25,6 +31,7 @@ interface CodeEditorPaneProps {
 
 export function CodeEditorPane({
     problem,
+    localRun,
     code,
     setCode,
     onSubmitCode,
@@ -37,7 +44,8 @@ export function CodeEditorPane({
     isConsoleOpen,
     setIsConsoleOpen,
 }: CodeEditorPaneProps) {
-    const [language, setLanguage] = useState(SUPPORTED_LANGUAGES[0])
+    const [selectedLanguage, setLanguage] = useState(SUPPORTED_LANGUAGES[0])
+    const language = localRun?.language ?? selectedLanguage
     const [fontSize, setFontSize] = useState(14)
     const [isCopied, setIsCopied] = useState(false)
     const [isFullscreen, setIsFullscreen] = useState(false)
@@ -79,6 +87,7 @@ export function CodeEditorPane({
             >
                 <EditorToolbar
                     language={language}
+                    fixedLanguage={Boolean(localRun)}
                     onLanguageChange={setLanguage}
                     fontSize={fontSize}
                     onFontSizeChange={setFontSize}
@@ -105,6 +114,7 @@ export function CodeEditorPane({
                     submission={activeSubmission}
                     isSubmitting={isSubmitting}
                     statusDetail={submissionStateDetail}
+                    local={Boolean(localRun)}
                 />
                 <div className="flex shrink-0 items-center justify-between gap-3 border-t border-border bg-card px-4 py-3">
                     <span className="font-mono text-[10px] text-muted-foreground">
@@ -113,6 +123,11 @@ export function CodeEditorPane({
                         {code.split("\n").length} lines
                     </span>
                     <div className="flex items-center gap-2">
+                        {localRun && isSubmitting && (
+                            <Button variant="outline" onClick={localRun.onStop}>
+                                Stop run
+                            </Button>
+                        )}
                         <Button
                             onClick={onSubmitCode}
                             disabled={isSubmitting}

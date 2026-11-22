@@ -8,6 +8,7 @@ interface SubmissionResultProps {
     submission: Submission
     variant?: "console" | "history"
     headerAction?: ReactNode
+    local?: boolean
 }
 
 // Both panes render the same result data here. History adds its timestamp and
@@ -16,6 +17,7 @@ export function SubmissionResult({
     submission,
     variant = "console",
     headerAction,
+    local = false,
 }: SubmissionResultProps) {
     const history = variant === "history"
     const showTests =
@@ -57,13 +59,13 @@ export function SubmissionResult({
                     headerAction
                 ) : (
                     <span className="font-mono text-xs text-muted-foreground">
-                        Job ID: {submission.id}
+                        {local ? "Run ID" : "Job ID"}: {submission.id}
                     </span>
                 )}
             </div>
             {history && (
                 <div className="text-xs text-muted-foreground">
-                    Job ID:{" "}
+                    {local ? "Run ID" : "Job ID"}:{" "}
                     <span className="font-mono text-foreground">
                         {submission.id}
                     </span>{" "}
@@ -88,7 +90,8 @@ export function SubmissionResult({
                             history ? "font-bold" : "text-xs font-semibold"
                         )}
                     >
-                        Worker Test {history ? "Results" : "Matrix"} (
+                        {local ? "Local" : "Worker"} Test{" "}
+                        {history ? "Results" : "Matrix"} (
                         {submission.testsPassed}/{submission.totalTests} passed)
                     </span>
                     <div
