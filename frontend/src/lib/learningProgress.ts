@@ -5,6 +5,20 @@ import {
     type QuizResponse,
 } from "../data/pointers.ts"
 
+import {
+    initialLessonProgress,
+    lessonProgressReducer,
+    restoreLessonProgress,
+    type LessonProgress,
+    type LessonProgressAction,
+} from "./lessonProgress.ts"
+import { clamp, index, record } from "./progressValidation.ts"
+
+const pointerSections = POINTER_CHAPTERS.map(({ id, frames }) => ({
+    id,
+    stepCount: frames.length,
+}))
+
 export interface QuestionProgress {
     response: QuizResponse
     checked: boolean
@@ -12,12 +26,7 @@ export interface QuestionProgress {
     firstTryCorrect: boolean | null
 }
 export interface LearningProgress {
-    lecture: {
-        chapter: number
-        step: number
-        viewed: string[]
-        completed: boolean
-    }
+    lecture: LessonProgress
     quiz: {
         question: number
         answers: Record<string, QuestionProgress>
@@ -25,8 +34,7 @@ export interface LearningProgress {
     }
 }
 export type LearningAction =
-    | { type: "lesson-step"; chapter: number; step: number }
-    | { type: "complete-lesson" }
+    | LessonProgressAction
     | { type: "quiz-response"; id: string; response: QuizResponse }
     | { type: "submit-answer"; id: string }
     | { type: "quiz-question"; index: number }
@@ -35,7 +43,7 @@ export type LearningAction =
 
 export function initialLearningProgress(): LearningProgress {
     return {
-        lecture: { chapter: 0, step: 0, viewed: [], completed: false },
+        lecture: initialLessonProgress(),
         quiz: { question: 0, answers: {}, showResults: false },
     }
 }
@@ -59,31 +67,20 @@ export function quizCorrectCount(progress: LearningProgress): number {
 export function isQuizComplete(progress: LearningProgress): boolean {
     return quizCorrectCount(progress) === POINTER_QUESTIONS.length
 }
-const clamp = (value: number, max: number) =>
-    Math.max(0, Math.min(max, Number.isFinite(value) ? Math.trunc(value) : 0))
-
 export function learningReducer(
     state: LearningProgress,
     action: LearningAction
 ): LearningProgress {
     switch (action.type) {
-        case "lesson-step": {
-            const chapter = clamp(action.chapter, POINTER_CHAPTERS.length - 1)
-            const current = POINTER_CHAPTERS[chapter]
-            const step = clamp(action.step, current.frames.length - 1)
-            const viewed =
-                step === current.frames.length - 1
-                    ? [...new Set([...state.lecture.viewed, current.id])]
-                    : state.lecture.viewed
-            return {
-                ...state,
-                lecture: { ...state.lecture, chapter, step, viewed },
-            }
+        case "lesson-step":
+        case "complete-lesson": {
+            const lecture = lessonProgressReducer(
+                state.lecture,
+                action,
+                pointerSections
+            )
+            return lecture === state.lecture ? state : { ...state, lecture }
         }
-        case "complete-lesson":
-            return state.lecture.viewed.length === POINTER_CHAPTERS.length
-                ? { ...state, lecture: { ...state.lecture, completed: true } }
-                : state
         case "quiz-response": {
             const question = POINTER_QUESTIONS.find(
                 (item) => item.id === action.id
@@ -161,42 +158,13 @@ export function learningReducer(
     }
 }
 
-function record(value: unknown): value is Record<string, unknown> {
-    return typeof value === "object" && value !== null && !Array.isArray(value)
-}
-function index(value: unknown, max: number): number {
-    return typeof value === "number" ? clamp(value, max) : 0
-}
-
 export function restoreLearningProgress(raw: string | null): LearningProgress {
     const fresh = initialLearningProgress()
     if (!raw) return fresh
     try {
         const saved: unknown = JSON.parse(raw)
         if (!record(saved) || saved.version !== 1) return fresh
-        if (record(saved.lecture)) {
-            const chapter = index(
-                saved.lecture.chapter,
-                POINTER_CHAPTERS.length - 1
-            )
-            const savedViewed = saved.lecture.viewed
-            const viewed = Array.isArray(savedViewed)
-                ? POINTER_CHAPTERS.filter((item) =>
-                      savedViewed.includes(item.id)
-                  ).map((item) => item.id)
-                : []
-            fresh.lecture = {
-                chapter,
-                step: index(
-                    saved.lecture.step,
-                    POINTER_CHAPTERS[chapter].frames.length - 1
-                ),
-                viewed,
-                completed:
-                    saved.lecture.completed === true &&
-                    viewed.length === POINTER_CHAPTERS.length,
-            }
-        }
+        fresh.lecture = restoreLessonProgress(saved.lecture, pointerSections)
         if (record(saved.quiz)) {
             fresh.quiz.question = index(
                 saved.quiz.question,
