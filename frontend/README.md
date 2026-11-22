@@ -101,6 +101,8 @@ Lecture/quiz progress is stored locally under `gradcamp.learning.v1`, survives r
 
 Assignment metadata and format discriminators live in `src/data/assignments.ts` and `src/types/index.ts`. Pointer content, memory models, and pure grading functions are in `src/data/pointers.ts`; progress validation/reducers are in `src/lib/learningProgress.ts`. `tests/pointers.test.ts` covers grading, retries, completion, and persisted-state validation. Animation respects reduced-motion preferences, including changes while the page is open.
 
+`src/components/learning/LessonPlayer.tsx` handles section and step navigation, playback, and completion UI. `PointerLesson.tsx` supplies the Pointers content, visualization, quiz links, and progress callbacks. The player does not depend on the learning context or require a quiz or visualization.
+
 Learning navigation uses overlapping CSS grid items to reserve the tallest content and feedback at the current viewport width, rather than hard-coded heights. Inactive items are invisible, inert, and hidden from assistive technology; inactive quiz controls are also disabled. This leaves some extra space on shorter questions but keeps action buttons stationary. Sequential navigation preserves the scroll position; selecting a section/question in the sidebar explicitly reveals it. Quiz question headings receive focus without scrolling on sequential navigation.
 
 ## Adding shadcn/ui Components
