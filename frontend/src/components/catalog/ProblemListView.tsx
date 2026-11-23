@@ -2,7 +2,7 @@ import { useState } from "react"
 import type { Assignment, Difficulty, Submission } from "@/types"
 import { ASSIGNMENT_KIND_LABELS } from "@/data/assignments"
 import { useLearning } from "@/context/LearningContext"
-import { isQuizComplete } from "@/lib/learningProgress"
+import { getLearningActivity } from "@/components/learning/learningActivities"
 import { DifficultyBadge } from "@/components/common/StatusBadges"
 import { AppLink } from "@/components/common/AppLink"
 import { assignmentPath } from "@/lib/appNavigation"
@@ -42,20 +42,10 @@ export function ProblemListView({
 
     const getProblemStatus = (problemId: string) => {
         const assignment = problems.find((item) => item.id === problemId)
-        if (assignment?.kind === "lecture")
-            return progress.lecture.completed
-                ? "solved"
-                : progress.lecture.viewed.length > 0 ||
-                    progress.lecture.step > 0 ||
-                    progress.lecture.chapter > 0
-                  ? "attempted"
-                  : "todo"
-        if (assignment?.kind === "quiz")
-            return isQuizComplete(progress)
-                ? "solved"
-                : Object.keys(progress.quiz.answers).length > 0
-                  ? "attempted"
-                  : "todo"
+        if (assignment && assignment.kind !== "code")
+            return (
+                getLearningActivity(assignment.id)?.status(progress) ?? "todo"
+            )
         const subs = submissions.filter((s) => s.problemId === problemId)
         if (subs.some((s) => s.status === "Accepted")) return "solved"
         if (subs.length > 0) return "attempted"
@@ -214,7 +204,9 @@ export function ProblemListView({
                                             </td>
                                             <td>
                                                 <AppLink
-                                                    href={assignmentPath(problem)}
+                                                    href={assignmentPath(
+                                                        problem
+                                                    )}
                                                     navigate={navigate}
                                                     className="flex items-center gap-3 text-left font-medium text-foreground transition-colors hover:text-primary"
                                                 >

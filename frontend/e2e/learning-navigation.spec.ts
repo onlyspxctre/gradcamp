@@ -62,9 +62,10 @@ test("lecture controls stay under the mouse through every step and section", asy
         await expect
             .poll(() =>
                 page.evaluate(() => {
-                    const { lecture } = JSON.parse(
-                        localStorage.getItem("gradcamp.learning.v1")!
+                    const { byAssignment } = JSON.parse(
+                        localStorage.getItem("gradcamp.learning.v2")!
                     )
+                    const lecture = byAssignment["pointers-lecture"]
                     return { chapter: lecture.chapter, step: lecture.step }
                 })
             )
@@ -202,4 +203,44 @@ test("quiz controls stay fixed through feedback, retries, and all six question l
         page.getByRole("heading", { name: "Follow the address", exact: true })
     ).toBeFocused()
     await expectNoOverflow(page)
+})
+
+test("legacy learning saves restore by assignment and survive a reload", async ({
+    page,
+}) => {
+    await page.addInitScript(
+        (viewed) => {
+            if (localStorage.getItem("gradcamp.learning.v1")) return
+            localStorage.setItem(
+                "gradcamp.learning.v1",
+                JSON.stringify({
+                    version: 1,
+                    lecture: { chapter: 0, step: 2, viewed, completed: true },
+                    quiz: { question: 1, answers: {}, showResults: false },
+                })
+            )
+        },
+        POINTER_CHAPTERS.map(({ id }) => id)
+    )
+    await page.goto("/assignments")
+    await expect(
+        page.getByRole("progressbar", { name: "Assignments completed" })
+    ).toHaveAttribute("aria-valuenow", "1")
+    await page
+        .getByRole("link", { name: "Pointers: the basics", exact: true })
+        .click()
+    await expect(
+        page.getByRole("status").filter({ hasText: "Lecture completed" })
+    ).toBeVisible()
+    await page
+        .getByRole("button", { name: "Open memory lab", exact: true })
+        .first()
+        .click()
+    await expect(
+        page.getByText("Question 2 of 6", { exact: true })
+    ).toBeVisible()
+    await page.reload()
+    await expect(
+        page.getByText("Question 2 of 6", { exact: true })
+    ).toBeVisible()
 })

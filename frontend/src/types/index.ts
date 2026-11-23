@@ -43,7 +43,6 @@ export interface AssignmentBase {
 
 export interface LearningAssignment extends AssignmentBase {
     kind: "lecture" | "quiz"
-    contentId: "pointers"
     description: string
     estimatedMinutes: number
 }

@@ -1,7 +1,6 @@
 import test from "node:test"
 import assert from "node:assert/strict"
 import {
-    POINTER_CHAPTERS,
     POINTER_QUESTIONS,
     formatAddress,
     makeMemory,
@@ -9,12 +8,12 @@ import {
     type QuizResponse,
 } from "../src/data/pointers.ts"
 import {
-    initialLearningProgress,
+    initialQuizProgress,
     isQuizComplete,
-    learningReducer,
+    pointerQuizReducer,
     quizCorrectCount,
-    restoreLearningProgress,
-} from "../src/lib/learningProgress.ts"
+    restoreQuizProgress,
+} from "../src/lib/pointerQuizProgress.ts"
 
 function correctResponse(index: number): QuizResponse {
     const question = POINTER_QUESTIONS[index]
@@ -90,51 +89,38 @@ test("array arithmetic locates p independently of the neighboring read", () => {
     )
 })
 
-test("lecture completion requires finishing each section, and preserves navigation", () => {
-    let state = initialLearningProgress()
-    assert.equal(
-        learningReducer(state, { type: "complete-lesson" }).lecture.completed,
-        false
-    )
-    for (const [chapter, data] of POINTER_CHAPTERS.entries())
-        state = learningReducer(state, {
-            type: "lesson-step",
-            chapter,
-            step: data.frames.length - 1,
-        })
-    state = learningReducer(state, { type: "complete-lesson" })
-    assert.equal(state.lecture.completed, true)
-    state = learningReducer(state, { type: "lesson-step", chapter: 0, step: 1 })
-    assert.equal(state.lecture.completed, true)
-    assert.equal(state.lecture.viewed.length, POINTER_CHAPTERS.length)
-})
-
 test("retries preserve first-try score; correct answers cannot be edited or submitted twice", () => {
     const question = POINTER_QUESTIONS[0]
-    let state = initialLearningProgress()
-    state = learningReducer(state, {
+    let state = initialQuizProgress()
+    state = pointerQuizReducer(state, {
         type: "quiz-response",
         id: question.id,
         response: { cellIndex: 0, value: "42" },
     })
-    state = learningReducer(state, { type: "submit-answer", id: question.id })
-    assert.equal(state.quiz.answers[question.id].firstTryCorrect, false)
-    state = learningReducer(state, {
+    state = pointerQuizReducer(state, {
+        type: "submit-answer",
+        id: question.id,
+    })
+    assert.equal(state.answers[question.id].firstTryCorrect, false)
+    state = pointerQuizReducer(state, {
         type: "quiz-response",
         id: question.id,
         response: correctResponse(0),
     })
-    assert.equal(state.quiz.answers[question.id].checked, false)
-    state = learningReducer(state, { type: "submit-answer", id: question.id })
-    assert.equal(state.quiz.answers[question.id].attempts, 2)
-    assert.equal(state.quiz.answers[question.id].firstTryCorrect, false)
+    assert.equal(state.answers[question.id].checked, false)
+    state = pointerQuizReducer(state, {
+        type: "submit-answer",
+        id: question.id,
+    })
+    assert.equal(state.answers[question.id].attempts, 2)
+    assert.equal(state.answers[question.id].firstTryCorrect, false)
     assert.equal(quizCorrectCount(state), 1)
     assert.equal(
-        learningReducer(state, { type: "submit-answer", id: question.id }),
+        pointerQuizReducer(state, { type: "submit-answer", id: question.id }),
         state
     )
     assert.equal(
-        learningReducer(state, {
+        pointerQuizReducer(state, {
             type: "quiz-response",
             id: question.id,
             response: { value: "9" },
@@ -144,64 +130,42 @@ test("retries preserve first-try score; correct answers cannot be edited or subm
 })
 
 test("completion, results, persistence, and retaking are consistent", () => {
-    let state = initialLearningProgress()
+    let state = initialQuizProgress()
     assert.equal(
-        learningReducer(state, { type: "quiz-results" }).quiz.showResults,
+        pointerQuizReducer(state, { type: "quiz-results" }).showResults,
         false
     )
     for (const [index, question] of POINTER_QUESTIONS.entries()) {
-        state = learningReducer(state, {
+        state = pointerQuizReducer(state, {
             type: "quiz-response",
             id: question.id,
             response: correctResponse(index),
         })
-        state = learningReducer(state, {
+        state = pointerQuizReducer(state, {
             type: "submit-answer",
             id: question.id,
         })
     }
     assert.equal(isQuizComplete(state), true)
-    state = learningReducer(state, { type: "quiz-results" })
-    assert.equal(state.quiz.showResults, true)
+    state = pointerQuizReducer(state, { type: "quiz-results" })
+    assert.equal(state.showResults, true)
     assert.deepEqual(
-        restoreLearningProgress(JSON.stringify({ version: 1, ...state })),
+        restoreQuizProgress(JSON.parse(JSON.stringify(state))),
         state
     )
-    const reset = learningReducer(state, { type: "reset-quiz" })
+    const reset = pointerQuizReducer(state, { type: "reset-quiz" })
     assert.equal(isQuizComplete(reset), false)
-    assert.deepEqual(reset.lecture, state.lecture)
-    assert.deepEqual(reset.quiz.answers, {})
+    assert.deepEqual(reset.answers, {})
 })
 
-test("corrupt, unknown-version, and out-of-range saved progress do not break the course", () => {
-    for (const raw of [null, "broken JSON", "null", "[]", '{"version":2}'])
-        assert.deepEqual(
-            restoreLearningProgress(raw),
-            initialLearningProgress()
-        )
-    const restored = restoreLearningProgress(
-        JSON.stringify({
-            version: 1,
-            lecture: {
-                chapter: 999,
-                step: -50,
-                viewed: ["unknown", "addresses", "addresses"],
-                completed: true,
-            },
-            quiz: {
-                question: -2,
-                answers: {
-                    "follow-address": { response: null, attempts: "bad" },
-                },
-                showResults: true,
-            },
-        })
+test("invalid saved quiz progress is ignored", () => {
+    assert.deepEqual(restoreQuizProgress(null), initialQuizProgress())
+    assert.deepEqual(
+        restoreQuizProgress({
+            question: -2,
+            answers: { "follow-address": { response: null, attempts: "bad" } },
+            showResults: true,
+        }),
+        initialQuizProgress()
     )
-    assert.equal(restored.lecture.chapter, POINTER_CHAPTERS.length - 1)
-    assert.equal(restored.lecture.step, 0)
-    assert.deepEqual(restored.lecture.viewed, ["addresses"])
-    assert.equal(restored.lecture.completed, false)
-    assert.equal(restored.quiz.question, 0)
-    assert.equal(restored.quiz.showResults, false)
-    assert.equal(isQuizComplete(restored), false)
 })

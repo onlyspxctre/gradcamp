@@ -1,3 +1,4 @@
+import type { ProgressDefinition } from "./assignmentProgress.ts"
 import { clamp, index, record } from "./progressValidation.ts"
 
 /** A lesson has at least one section, each with a unique ID and a positive step count. */
@@ -65,5 +66,26 @@ export function restoreLessonProgress(
         viewed,
         completed:
             saved.completed === true && viewed.length === sections.length,
+    }
+}
+
+export function defineLessonProgress(
+    id: string,
+    sections: readonly LessonProgressSection[],
+    legacyKey?: "lecture"
+): ProgressDefinition<LessonProgress, LessonProgressAction> {
+    return {
+        id,
+        legacyKey,
+        initial: initialLessonProgress,
+        restore: (saved) => restoreLessonProgress(saved, sections),
+        reduce: (state, action) =>
+            lessonProgressReducer(state, action, sections),
+        status: ({ completed, viewed, step, chapter }) =>
+            completed
+                ? "solved"
+                : viewed.length > 0 || step > 0 || chapter > 0
+                  ? "attempted"
+                  : "todo",
     }
 }

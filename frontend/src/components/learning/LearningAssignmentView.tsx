@@ -19,7 +19,7 @@ interface LearningAssignmentViewProps {
     completed: boolean
     onBack: () => void
     relatedAssignment?: { label: string; onOpen: () => void }
-    itemSummary: string
+    itemSummary?: string
     footerNote?: string
     children: ReactNode
 }
@@ -102,8 +102,8 @@ export function LearningAssignmentView({
                 <footer className="mt-5 flex flex-wrap justify-between gap-2 text-[10px] leading-5 text-muted-foreground">
                     {footerNote && <span>{footerNote}</span>}
                     <span>
-                        {itemSummary} · Progress saved in this browser when
-                        storage is available.
+                        {itemSummary && `${itemSummary} · `}Progress saved in
+                        this browser when storage is available.
                     </span>
                 </footer>
             </div>

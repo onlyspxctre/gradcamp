@@ -2,7 +2,8 @@ import type { ActiveNavTab, Assignment } from "@/types"
 import { MOCK_PROBLEMS } from "@/data/mockProblems"
 import { ASSIGNMENTS } from "@/data/assignments"
 import { LearningProvider } from "@/context/LearningContext"
-import { PointersAssignmentView } from "@/components/learning/PointersAssignmentView"
+import { LearningAssignmentPage } from "@/components/learning/LearningAssignmentPage"
+import { learningProgressCodecs } from "@/components/learning/learningActivities"
 import { Navbar } from "@/components/layout/Navbar"
 import { ProblemWorkspace } from "@/components/problem/ProblemWorkspace"
 import { ProblemListView } from "@/components/catalog/ProblemListView"
@@ -53,9 +54,10 @@ function AppContent({
                             problem={route.assignment}
                         />
                     ) : (
-                        <PointersAssignmentView
+                        <LearningAssignmentPage
                             key={route.assignment.id}
                             assignment={route.assignment}
+                            assignments={ASSIGNMENTS}
                             onSelectAssignment={handleSelectAssignment}
                             onBack={() => navigate(tabPaths.assignments)}
                         />
@@ -102,7 +104,7 @@ export function App() {
     const navigation = useAppNavigation()
     return (
         <WorkspaceProvider assignment={navigation.workspaceAssignment}>
-            <LearningProvider>
+            <LearningProvider codecs={learningProgressCodecs}>
                 <AppContent {...navigation} />
             </LearningProvider>
         </WorkspaceProvider>

@@ -8,12 +8,13 @@ import {
     BookOpen,
 } from "lucide-react"
 import { POINTER_QUESTIONS, gradePointerAnswer } from "@/data/pointers"
-import { useLearning } from "@/context/LearningContext"
+import { pointerQuizProgress } from "@/data/pointerProgressDefinitions"
+import { useAssignmentProgress } from "@/context/LearningContext"
 import {
     initialQuestionProgress,
     isQuizComplete,
     quizCorrectCount,
-} from "@/lib/learningProgress"
+} from "@/lib/pointerQuizProgress"
 import { Button } from "@/components/ui/button"
 import { QuizQuestionBody } from "./QuizQuestionBody"
 
@@ -26,9 +27,9 @@ export function PointerQuiz({
 }: {
     onReviewLesson: (chapterId: string) => void
 }) {
-    const { progress, dispatch } = useLearning()
-    const questionIndex = progress.quiz.question
-    const showResults = progress.quiz.showResults
+    const { progress, dispatch } = useAssignmentProgress(pointerQuizProgress)
+    const questionIndex = progress.question
+    const showResults = progress.showResults
     const contentRef = useRef<HTMLElement>(null)
     const headingRef = useRef<HTMLHeadingElement>(null)
     const revealQuestionRef = useRef(false)
@@ -51,13 +52,13 @@ export function PointerQuiz({
     }, [questionIndex, showResults])
 
     const question = POINTER_QUESTIONS[questionIndex]
-    const answer = progress.quiz.answers[question.id] ?? EMPTY_ANSWER
+    const answer = progress.answers[question.id] ?? EMPTY_ANSWER
     const correct =
         answer.checked && gradePointerAnswer(question, answer.response).correct
     const totalCorrect = quizCorrectCount(progress)
     const complete = isQuizComplete(progress)
     const firstTryScore = POINTER_QUESTIONS.filter(
-        (item) => progress.quiz.answers[item.id]?.firstTryCorrect === true
+        (item) => progress.answers[item.id]?.firstTryCorrect === true
     ).length
     const go = (index: number, revealQuestion = false) => {
         revealQuestionRef.current =
@@ -142,9 +143,9 @@ export function PointerQuiz({
                                 {item.title}
                             </button>
                             <span className="shrink-0 text-xs text-muted-foreground">
-                                {progress.quiz.answers[item.id].attempts === 1
+                                {progress.answers[item.id].attempts === 1
                                     ? "First try"
-                                    : `${progress.quiz.answers[item.id].attempts} attempts`}
+                                    : `${progress.answers[item.id].attempts} attempts`}
                             </span>
                         </li>
                     ))}
@@ -176,7 +177,7 @@ export function PointerQuiz({
                     aria-label="Quiz questions"
                 >
                     {POINTER_QUESTIONS.map((item, index) => {
-                        const saved = progress.quiz.answers[item.id]
+                        const saved = progress.answers[item.id]
                         const passed =
                             saved?.checked &&
                             gradePointerAnswer(item, saved.response).correct
@@ -267,8 +268,7 @@ export function PointerQuiz({
                                 key={item.id}
                                 question={item}
                                 answer={
-                                    progress.quiz.answers[item.id] ??
-                                    EMPTY_ANSWER
+                                    progress.answers[item.id] ?? EMPTY_ANSWER
                                 }
                                 active={index === questionIndex}
                                 headingRef={
@@ -360,7 +360,7 @@ export function PointerQuiz({
                                             POINTER_QUESTIONS.findIndex(
                                                 (item) => {
                                                     const saved =
-                                                        progress.quiz.answers[
+                                                        progress.answers[
                                                             item.id
                                                         ]
                                                     return (

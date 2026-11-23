@@ -6,7 +6,10 @@ import {
     type PointerQuestion,
     type QuizResponse,
 } from "@/data/pointers"
-import type { LearningAction, QuestionProgress } from "@/lib/learningProgress"
+import type {
+    PointerQuizAction,
+    QuestionProgress,
+} from "@/lib/pointerQuizProgress"
 import { CodeTrace } from "./CodeTrace"
 import { MemoryDiagram } from "./MemoryDiagram"
 
@@ -104,7 +107,7 @@ interface QuizQuestionBodyProps {
     answer: QuestionProgress
     active: boolean
     headingRef?: Ref<HTMLHeadingElement>
-    dispatch: Dispatch<LearningAction>
+    dispatch: Dispatch<PointerQuizAction>
 }
 
 // Inactive questions still size the shared grid, but are inert, inaccessible, and
