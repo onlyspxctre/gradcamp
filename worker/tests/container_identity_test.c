@@ -30,12 +30,42 @@ static int test_getentropy(void *buffer, size_t length) {
     return getentropy(buffer, length);
 }
 
+static bool has_arg(char *const argv[], const char *flag) {
+    for (size_t i = 0; argv[i]; ++i) {
+        if (strcmp(argv[i], flag) == 0) return true;
+    }
+    return false;
+}
+
 static int test_execvp(const char *file, char *const argv[]) {
     assert(strcmp(file, "podman") == 0);
     assert(strcmp(argv[1], "run") == 0);
+
+    static const char *const shared_flags[] = {
+        "--rm",
+        "--runtime=krun",
+        "--network=none",
+        "--cpus=1.0",
+        "--annotation=krun.cpus=1",
+        "--memory=256m",
+        "--pids-limit=64",
+        "--read-only",
+        "--user=1000:1000",
+        "--cap-drop=ALL",
+        "--security-opt=no-new-privileges:true",
+        "--tmpfs=/tmp:rw,noexec,nosuid,size=16m",
+        "--userns=keep-id",
+    };
+    for (size_t i = 0; i < sizeof(shared_flags) / sizeof(shared_flags[0]); ++i) {
+        assert(has_arg(argv, shared_flags[i]));
+    }
+
+    bool is_executor = strcmp(expected_image, "executor:latest") == 0;
+    assert(has_arg(argv, is_executor ? "--timeout=30" : "--timeout=10"));
+
     int names = 0;
     int tests_mounts = 0;
-    bool auto_remove = false;
+    int driver_mounts = 0;
     size_t argc = 0;
     for (; argv[argc]; ++argc) {
         if (strcmp(argv[argc], "--name") == 0) {
@@ -43,15 +73,18 @@ static int test_execvp(const char *file, char *const argv[]) {
             assert(strcmp(argv[argc + 1], expected_name) == 0);
             ++names;
         }
-        if (strcmp(argv[argc], "--rm") == 0) auto_remove = true;
-        if (strcmp(argv[argc], "--mount") == 0 && argv[argc + 1] &&
-            strcmp(argv[argc + 1], "type=bind,src=./questions/0000-0000-add-two-integers/tests.json,dst=/workspace/tests.json,ro,relabel=shared") == 0) {
-            ++tests_mounts;
+        if (strcmp(argv[argc], "--mount") == 0 && argv[argc + 1]) {
+            if (strcmp(argv[argc + 1], "type=bind,src=./questions/0000-0000-add-two-integers/tests.json,dst=/workspace/tests.json,ro,relabel=shared") == 0) {
+                ++tests_mounts;
+            }
+            if (strcmp(argv[argc + 1], "type=bind,src=./questions/0000-0000-add-two-integers/driver.c,dst=/workspace/driver/driver.c,ro,relabel=shared") == 0) {
+                ++driver_mounts;
+            }
         }
     }
     assert(names == 1);
-    assert(tests_mounts == (strcmp(expected_image, "executor:latest") == 0));
-    assert(auto_remove);
+    assert(tests_mounts == (is_executor ? 1 : 0));
+    assert(driver_mounts == (is_executor ? 0 : 1));
     assert(strcmp(argv[argc - 1], expected_image) == 0);
     _exit(0);
 }

@@ -170,17 +170,18 @@ static int mark_job_failed(const char *id, const char *message) {
     return failed;
 }
 
-static void executor(const char *id, const char *question_dir, char *container_name) {
-    char bin_mount[256], out_mount[256], tests_mount[256];
-    snprintf(bin_mount, sizeof(bin_mount), "type=bind,src=./job/%s/bin,dst=/workspace/bin,ro,relabel=private", id);
-    snprintf(out_mount, sizeof(out_mount), "type=bind,src=./job/%s/out,dst=/workspace/out,rw,relabel=private", id);
-    snprintf(tests_mount, sizeof(tests_mount), "type=bind,src=./questions/%s/tests.json,dst=/workspace/tests.json,ro,relabel=shared", question_dir);
-
+static void run_sandboxed_stage(const char *timeout_flag,
+                                const char *mount1,
+                                const char *mount2,
+                                const char *mount3,
+                                char *container_name,
+                                char *image,
+                                const char *err_label) {
     char *args[] = {
         "podman",
         "run",
         "--rm",
-        "--timeout=30",
+        (char *) timeout_flag,
         "--runtime=krun",
         "--network=none",
         "--cpus=1.0",
@@ -193,21 +194,36 @@ static void executor(const char *id, const char *question_dir, char *container_n
         "--security-opt=no-new-privileges:true",
         "--tmpfs=/tmp:rw,noexec,nosuid,size=16m",
         "--mount",
-        bin_mount,
+        (char *) mount1,
         "--mount",
-        out_mount,
+        (char *) mount2,
         "--mount",
-        tests_mount,
+        (char *) mount3,
         "--name",
         container_name,
         "--userns=keep-id",
-        "executor:latest",
+        image,
         NULL,
     };
     execvp(args[0], args);
 
-    perror("Executor execvp failed");
+    perror(err_label);
     exit(1);
+}
+
+static void executor(const char *id, const char *question_dir, char *container_name) {
+    char bin_mount[256], out_mount[256], tests_mount[256];
+    snprintf(bin_mount, sizeof(bin_mount), "type=bind,src=./job/%s/bin,dst=/workspace/bin,ro,relabel=private", id);
+    snprintf(out_mount, sizeof(out_mount), "type=bind,src=./job/%s/out,dst=/workspace/out,rw,relabel=private", id);
+    snprintf(tests_mount, sizeof(tests_mount), "type=bind,src=./questions/%s/tests.json,dst=/workspace/tests.json,ro,relabel=shared", question_dir);
+
+    run_sandboxed_stage("--timeout=30",
+                        bin_mount,
+                        out_mount,
+                        tests_mount,
+                        container_name,
+                        "executor:latest",
+                        "Executor execvp failed");
 }
 
 static void compiler(const char *id, const char *question_dir, char *container_name) {
@@ -216,38 +232,13 @@ static void compiler(const char *id, const char *question_dir, char *container_n
     snprintf(bin_mount, sizeof(bin_mount), "type=bind,src=./job/%s/bin,dst=/workspace/bin,rw,relabel=private", id);
     snprintf(driver_mount, sizeof(driver_mount), "type=bind,src=./questions/%s/driver.c,dst=/workspace/driver/driver.c,ro,relabel=shared", question_dir);
 
-    char *args[] = {
-        "podman",
-        "run",
-        "--rm",
-        "--timeout=10",
-        "--runtime=krun",
-        "--network=none",
-        "--cpus=1.0",
-        "--annotation=krun.cpus=1",
-        "--memory=256m",
-        "--pids-limit=64",
-        "--read-only",
-        "--user=1000:1000",
-        "--cap-drop=ALL",
-        "--security-opt=no-new-privileges:true",
-        "--tmpfs=/tmp:rw,noexec,nosuid,size=16m",
-        "--mount",
-        src_mount,
-        "--mount",
-        bin_mount,
-        "--mount",
-        driver_mount,
-        "--name",
-        container_name,
-        "--userns=keep-id",
-        "compiler:latest",
-        NULL,
-    };
-    execvp(args[0], args);
-
-    perror("Compiler execvp failed");
-    exit(1);
+    run_sandboxed_stage("--timeout=10",
+                        src_mount,
+                        bin_mount,
+                        driver_mount,
+                        container_name,
+                        "compiler:latest",
+                        "Compiler execvp failed");
 }
 
 static void job(const char *id, const char *question_dir) {
