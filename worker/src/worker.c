@@ -401,8 +401,23 @@ static void job(const char *id, const char *question_dir) {
     free(results_buf);
 }
 
+static volatile sig_atomic_t g_stop = 0;
+
+static void handle_shutdown_signal(int sig) {
+    (void) sig;
+    g_stop = 1;
+}
+
 int main(void) {
     signal(SIGCHLD, SIG_IGN);
+
+    struct sigaction sa = {0};
+    sa.sa_handler = handle_shutdown_signal;
+    sigemptyset(&sa.sa_mask);
+    if (sigaction(SIGINT, &sa, NULL) != 0 || sigaction(SIGTERM, &sa, NULL) != 0) {
+        perror("sigaction");
+        return 1;
+    }
 
     if (gradcamp_redis_init() != 0) {
         return 1;
@@ -410,20 +425,33 @@ int main(void) {
 
     printf("Worker listening to jobs_pending queue...\n");
 
-    while (1) {
-        redisReply *res = gradcamp_redis_run_cmd("LPOP jobs_pending");
+    while (!g_stop) {
+        redisReply *res = gradcamp_redis_run_cmd("BRPOP jobs_pending 1");
         if (!res) {
-            usleep(50000);
+            if (!g_stop) usleep(500000);
             continue;
         }
 
-        if (res->type != REDIS_REPLY_STRING) {
+        if (res->type == REDIS_REPLY_NIL) {
             freeReplyObject(res);
-            usleep(50000);
             continue;
         }
 
-        yyjson_doc *res_json = yyjson_read(res->str, res->len, 0);
+        if (res->type == REDIS_REPLY_ERROR) {
+            fprintf(stderr, "Valkey BRPOP error: %s\n", res->str ? res->str : "unknown");
+            freeReplyObject(res);
+            if (!g_stop) usleep(500000);
+            continue;
+        }
+
+        if (res->type != REDIS_REPLY_ARRAY || res->elements != 2 ||
+            !res->element[1] || res->element[1]->type != REDIS_REPLY_STRING) {
+            freeReplyObject(res);
+            continue;
+        }
+
+        redisReply *payload = res->element[1];
+        yyjson_doc *res_json = yyjson_read(payload->str, payload->len, 0);
         yyjson_val *res_json_root = res_json ? yyjson_doc_get_root(res_json) : NULL;
         yyjson_val *res_json_uuid = res_json_root ? yyjson_obj_get(res_json_root, "uuid") : NULL;
         const char *res_json_uuid_str = yyjson_get_str(res_json_uuid);
@@ -461,6 +489,8 @@ int main(void) {
             continue;
         } else if (pid == 0) {
             signal(SIGCHLD, SIG_DFL);
+            signal(SIGINT, SIG_DFL);
+            signal(SIGTERM, SIG_DFL);
             gradcamp_redis_free();
             if (gradcamp_redis_init() == 0) {
                 job(job_id, question->directory);
