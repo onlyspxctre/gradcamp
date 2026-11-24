@@ -47,7 +47,7 @@ export function EditorToolbar({
                 >
                     <SelectTrigger
                         size="sm"
-                        className="h-7 min-w-[112px] border-transparent bg-transparent font-medium shadow-none"
+                        className="h-7 min-w-[72px] border-transparent bg-transparent font-medium shadow-none"
                         aria-label="Programming language"
                     >
                         <SelectValue placeholder="Select Language" />
