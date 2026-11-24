@@ -121,3 +121,46 @@ for (const body of [
         assert.equal(result.testResults, undefined)
         assert.equal(result.totalTests, 0)
     })
+
+test("passes AbortSignal to /upload and /fetch and continues polling after a transient /fetch error", async () => {
+    const originalFetch = globalThis.fetch
+    let uploadSignal: AbortSignal | null | undefined
+    const fetchSignals: Array<AbortSignal | null | undefined> = []
+    let pollCount = 0
+
+    globalThis.fetch = async (input, options) => {
+        if (String(input).startsWith("/upload?job=")) {
+            uploadSignal = options?.signal
+            return new Response("Uploaded")
+        }
+        fetchSignals.push(options?.signal)
+        pollCount++
+        if (pollCount === 1) {
+            throw new DOMException("The operation timed out.", "TimeoutError")
+        }
+        return new Response(
+            JSON.stringify({
+                status: "completed",
+                results: {
+                    tests: [{ name: "Test One", passed: true, error: "" }],
+                },
+            }),
+            { headers: { "Content-Type": "application/json" } }
+        )
+    }
+
+    try {
+        const result = await submitToBackendQueue({
+            problemId: "42",
+            problemTitle: "Add Two Integers",
+            code: "int add(int a, int b) { return a + b; }",
+        })
+        assert.ok(uploadSignal instanceof AbortSignal)
+        assert.equal(fetchSignals.length, 2)
+        assert.ok(fetchSignals[0] instanceof AbortSignal)
+        assert.ok(fetchSignals[1] instanceof AbortSignal)
+        assert.equal(result.status, "Accepted")
+    } finally {
+        globalThis.fetch = originalFetch
+    }
+})

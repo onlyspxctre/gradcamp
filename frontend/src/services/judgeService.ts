@@ -8,6 +8,9 @@ function generateJobId(): string {
     return "job" + Math.random().toString(36).substring(2, 14)
 }
 
+const UPLOAD_TIMEOUT_MS = 10_000
+const FETCH_TIMEOUT_MS = 5_000
+
 export interface SubmitOptions {
     problemId: string
     problemTitle: string
@@ -40,6 +43,7 @@ export async function submitToBackendQueue(
             headers: {
                 "Content-Type": "text/plain",
             },
+            signal: AbortSignal.timeout(UPLOAD_TIMEOUT_MS),
         })
 
         if (!uploadRes.ok) {
@@ -80,7 +84,14 @@ export async function submitToBackendQueue(
             }
             await new Promise((r) => setTimeout(r, timeout))
 
-            const fetchRes = await fetch(`/fetch?job=${jobId}`)
+            let fetchRes: Response
+            try {
+                fetchRes = await fetch(`/fetch?job=${jobId}`, {
+                    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+                })
+            } catch {
+                continue
+            }
             if (!fetchRes.ok) {
                 continue
             }
