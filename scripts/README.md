@@ -46,8 +46,8 @@ When a submission is tested, `benchmark.py` breaks the end-to-end execution down
    - Total wall-clock time from the initial HTTP upload request to the final result retrieval.
 
 5. **Simulated Frontend Perceived Latency (`frontend_sim_ms`)**:
-   - Models the latency perceived by a web user under the frontend's current polling policy (initial 800ms sleep followed by 800ms polling intervals).
-   - Demonstrates the quantization lag addressed by Issue #4.
+   - Models perceived latency using a legacy fixed 800ms polling baseline (initial 800ms sleep followed by 800ms polling intervals) in `benchmark.py`, kept distinct from measured `total_e2e_ms`.
+   - The live frontend now uses adaptive polling (`250ms`, `500ms`, `750ms`, then `800ms` intervals; Issue #4).
 
 ---
 
