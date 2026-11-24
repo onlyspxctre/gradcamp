@@ -189,29 +189,14 @@ void on_upload(fio_http_s *h) {
     }
 
     fio_str_info_s query = fio_http_query(h);
-    fio_buf_info_s job_buf = {0};
     fio_buf_info_s question_buf = {0};
 
     if (query.len) {
         FIO_URL_QUERY_EACH(FIO_STR2BUF_INFO(query), i) {
-            if (FIO_BUF_INFO_IS_EQ(i.name, FIO_BUF_INFO1("job"))) {
-                job_buf = i.value;
-            } else if (FIO_BUF_INFO_IS_EQ(i.name, FIO_BUF_INFO1("question"))) {
+            if (FIO_BUF_INFO_IS_EQ(i.name, FIO_BUF_INFO1("question"))) {
                 question_buf = i.value;
             }
         }
-    }
-
-    if (!job_buf.len) {
-        fio_http_status_set(h, 400);
-        fio_http_write(h, fio_string_from_cstr("No job specified!"), .finish = 1);
-        return;
-    }
-
-    if (!valid_job_id(job_buf.buf, job_buf.len)) {
-        fio_http_status_set(h, 400);
-        fio_http_write(h, fio_string_from_cstr("Invalid job ID!"), .finish = 1);
-        return;
     }
 
     const struct grading_question *question = find_grading_question(question_buf.buf, question_buf.len);
@@ -229,7 +214,22 @@ void on_upload(fio_http_s *h) {
         return;
     }
 
-    redisReply *reply = gradcamp_redis_run_cmd("HSET job:%b status pending source %b", job_buf.buf, job_buf.len, body.buf, body.len);
+    uint8_t raw[16];
+    if (fio_rand_bytes_secure(raw, sizeof(raw)) != 0) {
+        fio_http_status_set(h, 500);
+        fio_http_write(h, fio_string_from_cstr("Failed to generate job ID!\n"), .finish = 1);
+        return;
+    }
+
+    char job_uuid[32 + 1] = {0};
+    for (size_t i = 0; i < sizeof(raw); ++i) {
+        snprintf(job_uuid + i * 2, 3, "%02x", raw[i]);
+    }
+
+    fio_str_info_s job_uuid_buf = FIO_STR_INFO2(job_uuid, 32);
+
+
+    redisReply *reply = gradcamp_redis_run_cmd("HSET job:%b status pending source %b", job_uuid_buf.buf, job_uuid_buf.len, body.buf, body.len);
     if (!reply || reply->type == REDIS_REPLY_ERROR) {
         fio_http_status_set(h, 500);
         if (reply) freeReplyObject(reply);
@@ -241,7 +241,7 @@ void on_upload(fio_http_s *h) {
     char queue_payload[256];
     int payload_len = snprintf(queue_payload, sizeof(queue_payload),
                                "{\"uuid\":\"%.*s\",\"question\":\"%s\"}",
-                               (int)job_buf.len, job_buf.buf, question->id);
+                               (int)job_uuid_buf.len, job_uuid_buf.buf, question->id);
     if (payload_len < 0 || (size_t)payload_len >= sizeof(queue_payload)) {
         fio_http_status_set(h, 500);
         fio_http_write(h, fio_string_from_cstr("Failed to serialize queue payload!\n"), .finish = 1);
@@ -257,8 +257,8 @@ void on_upload(fio_http_s *h) {
     }
     freeReplyObject(reply);
 
-    fio_http_status_set(h, 200);
-    fio_http_write(h, fio_string_from_cstr("Uploaded\n"), .finish = 1);
+    fio_http_status_set(h, 201);
+    fio_http_write(h, .buf = job_uuid_buf.buf, .len = job_uuid_buf.len, .finish = 1);
 }
 
 static void cleanup(void *ignored) {

@@ -16,8 +16,11 @@ for (const malformed of [false, true]) {
                 "Test Two (-10 + 4 = -6)",
                 "Test Three (0 + 0 = 0)",
             ]
-            await page.route("**/upload?job=*", async (route) => {
-                await route.fulfill({ status: 200, body: "Uploaded" })
+            await page.route("**/upload?*", async (route) => {
+                await route.fulfill({
+                    status: 200,
+                    body: "0123456789abcdef0123456789abcdef",
+                })
             })
             await page.route("**/fetch?job=*", async (route) => {
                 await route.fulfill({

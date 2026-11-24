@@ -1,11 +1,11 @@
 import type { Submission, SubmissionStatus } from "@/types"
 import { parseJudgeResponse } from "./judgeContract"
 
-function generateJobId(): string {
+function localSubmissionId(): string {
     if (typeof crypto !== "undefined" && crypto.randomUUID) {
-        return crypto.randomUUID().replace(/-/g, "").substring(0, 16)
+        return `local-${crypto.randomUUID()}`
     }
-    return "job" + Math.random().toString(36).substring(2, 14)
+    return `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 }
 
 const OBSERVATION_BUDGET_MS = 75_000
@@ -32,7 +32,6 @@ export async function submitToBackendQueue(
         onStatusChange,
         observationBudgetMs = OBSERVATION_BUDGET_MS,
     } = options
-    const jobId = generateJobId()
     const timestamp = new Date().toLocaleTimeString([], {
         hour: "2-digit",
         minute: "2-digit",
@@ -40,7 +39,6 @@ export async function submitToBackendQueue(
     })
 
     const uploadQuery = new URLSearchParams({
-        job: jobId,
         question: problemId,
     })
     const uploadUrl = `/upload?${uploadQuery}`
@@ -56,10 +54,11 @@ export async function submitToBackendQueue(
             signal: AbortSignal.timeout(UPLOAD_TIMEOUT_MS),
         })
 
+        const uploadText = (await uploadRes.text().catch(() => "")).trim()
+
         if (!uploadRes.ok) {
-            const errText = await uploadRes.text().catch(() => "Upload failed")
             return {
-                id: jobId,
+                id: localSubmissionId(),
                 problemId,
                 problemTitle,
                 language: "C",
@@ -68,7 +67,23 @@ export async function submitToBackendQueue(
                 timestamp,
                 testsPassed: 0,
                 totalTests: 0,
-                compileError: `Backend HTTP ${uploadRes.status}: ${errText}`,
+                compileError: `Backend HTTP ${uploadRes.status}: ${uploadText || "Upload failed"}`,
+            }
+        }
+
+        const jobId = uploadText
+        if (!jobId) {
+            return {
+                id: localSubmissionId(),
+                problemId,
+                problemTitle,
+                language: "C",
+                code,
+                status: "Runtime Error",
+                timestamp,
+                testsPassed: 0,
+                totalTests: 0,
+                compileError: "Backend (/upload) returned an empty job ID.",
             }
         }
 
@@ -196,7 +211,7 @@ export async function submitToBackendQueue(
         const isTimeout = err instanceof Error && err.name === "TimeoutError"
         const message = err instanceof Error ? err.message : String(err)
         return {
-            id: jobId,
+            id: localSubmissionId(),
             problemId,
             problemTitle,
             language: "C",

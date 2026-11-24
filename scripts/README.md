@@ -11,7 +11,7 @@ When a submission is tested, `benchmark.py` breaks the end-to-end execution down
 ```
 [ benchmark.py ]
        │
-       │  1. Upload HTTP (POST /upload?job=<id>&question=0)
+       │  1. Upload HTTP (POST /upload?question=0)
        ▼
  [ backend (fio) ] ── LPUSH ──► [ Redis (jobs_pending) ]
                                        │
@@ -31,7 +31,7 @@ When a submission is tested, `benchmark.py` breaks the end-to-end execution down
 ### Metrics Measured
 
 1. **Upload HTTP (`upload_ms`)**:
-   - Time to send the C source code via `POST /upload?job=<id>&question=0` (Add Two Integers).
+   - Time to send the C source code via `POST /upload?question=0` (Add Two Integers).
    - Includes backend HTTP processing, writing `job:<id>` metadata to Redis, and `LPUSH` into `jobs_pending`.
 
 2. **Queue Pickup (`queue_pickup_ms`)**:

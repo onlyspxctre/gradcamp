@@ -144,9 +144,7 @@ def run_single_submission(
     poll_interval_sec: float,
     timeout_sec: float
 ) -> Dict[str, Any]:
-    job_id = uuid.uuid4().hex[:16]
-    upload_url = f"{base_url}/upload?job={job_id}&question={ADD_TWO_INTEGERS_ID}"
-    fetch_url = f"{base_url}/fetch?job={job_id}"
+    upload_url = f"{base_url}/upload?question={ADD_TWO_INTEGERS_ID}"
 
     # 1. Measure Upload Phase
     t_start = time.perf_counter()
@@ -160,9 +158,10 @@ def run_single_submission(
     try:
         with urllib.request.urlopen(req, timeout=5.0) as resp:
             upload_status = resp.status
+            job_id = resp.read().decode("utf-8").strip()
     except Exception as e:
         return {
-            "job_id": job_id,
+            "job_id": None,
             "error": f"Upload failed: {e}",
             "status": "upload_error",
             "total_e2e_ms": 0.0
@@ -170,8 +169,9 @@ def run_single_submission(
 
     t_upload_done = time.perf_counter()
     upload_ms = (t_upload_done - t_start) * 1000.0
+    fetch_url = f"{base_url}/fetch?job={job_id}"
 
-    if upload_status != 200:
+    if upload_status not in (200, 201):
         return {
             "job_id": job_id,
             "error": f"Upload returned HTTP {upload_status}",

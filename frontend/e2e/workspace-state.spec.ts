@@ -8,10 +8,10 @@ test("history and console share selection while Back to list changes only presen
     const secondGrading = new Promise<void>((resolve) => {
         finishSecond = resolve
     })
-    await page.route("**/upload?job=*", async (route) => {
-        const id = new URL(route.request().url()).searchParams.get("job")!
+    await page.route("**/upload?*", async (route) => {
+        const id = `job-${attempts.size + 1}`
         attempts.set(id, attempts.size + 1)
-        await route.fulfill({ status: 200, body: "OK" })
+        await route.fulfill({ status: 200, body: id })
     })
     await page.route("**/fetch?job=*", async (route) => {
         const id = new URL(route.request().url()).searchParams.get("job")!
@@ -105,9 +105,12 @@ test("a result completing after assignment navigation stays in history without l
     const grading = new Promise<void>((resolve) => {
         finishGrading = resolve
     })
-    await page.route("**/upload?job=*", async (route) => {
+    await page.route("**/upload?*", async (route) => {
         uploads++
-        await route.fulfill({ status: 200, body: "OK" })
+        await route.fulfill({
+            status: 200,
+            body: "0123456789abcdef0123456789abcdef",
+        })
     })
     await page.route("**/fetch?job=*", async (route) => {
         await grading

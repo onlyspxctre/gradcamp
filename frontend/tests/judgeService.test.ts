@@ -4,21 +4,23 @@ import { submitToBackendQueue } from "../src/services/judgeService.ts"
 
 async function submitWithPollResponses(...bodies: string[]) {
     const problemId = "42"
+    const expectedJobId = "0123456789abcdef0123456789abcdef"
     const originalFetch = globalThis.fetch
     let uploads = 0
     globalThis.fetch = async (input, options) => {
-        if (String(input).startsWith("/upload?job=")) {
+        if (String(input).startsWith("/upload?")) {
             uploads++
             const url = new URL(String(input), "http://localhost")
+            assert.equal(url.searchParams.get("job"), null)
             assert.equal(url.searchParams.get("question"), problemId)
             assert.equal(options?.method, "POST")
             assert.equal(
                 options?.body,
                 "int add(int a, int b) { return a + b; }"
             )
-            return new Response("Uploaded")
+            return new Response(expectedJobId)
         }
-        assert.match(String(input), /^\/fetch\?job=/)
+        assert.equal(String(input), `/fetch?job=${expectedJobId}`)
         const body = bodies.shift()
         assert.notEqual(body, undefined, "unexpected extra poll")
         return new Response(body, {
@@ -129,9 +131,9 @@ test("passes AbortSignal to /upload and /fetch and continues polling after a tra
     let pollCount = 0
 
     globalThis.fetch = async (input, options) => {
-        if (String(input).startsWith("/upload?job=")) {
+        if (String(input).startsWith("/upload?")) {
             uploadSignal = options?.signal
-            return new Response("Uploaded")
+            return new Response("0123456789abcdef0123456789abcdef")
         }
         fetchSignals.push(options?.signal)
         pollCount++
@@ -168,8 +170,8 @@ test("passes AbortSignal to /upload and /fetch and continues polling after a tra
 test("returns Status Unknown when polling expires while backend is still pending", async () => {
     const originalFetch = globalThis.fetch
     globalThis.fetch = async (input) => {
-        if (String(input).startsWith("/upload?job=")) {
-            return new Response("Uploaded")
+        if (String(input).startsWith("/upload?")) {
+            return new Response("0123456789abcdef0123456789abcdef")
         }
         return new Response(JSON.stringify({ status: "pending" }), {
             headers: { "Content-Type": "application/json" },
@@ -196,8 +198,8 @@ test("returns Status Unknown when polling expires while backend is still pending
 test("returns Status Unknown with poll-failure message when /fetch requests keep aborting", async () => {
     const originalFetch = globalThis.fetch
     globalThis.fetch = async (input) => {
-        if (String(input).startsWith("/upload?job=")) {
-            return new Response("Uploaded")
+        if (String(input).startsWith("/upload?")) {
+            return new Response("0123456789abcdef0123456789abcdef")
         }
         throw new DOMException("The operation timed out.", "TimeoutError")
     }
