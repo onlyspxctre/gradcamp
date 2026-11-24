@@ -9,6 +9,7 @@ export type SubmissionStatus =
     | "Compile Error"
     | "Pending"
     | "In Progress"
+    | "Status Unknown"
 
 export interface TestCase {
     id: string

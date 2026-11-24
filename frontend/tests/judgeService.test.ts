@@ -164,3 +164,79 @@ test("passes AbortSignal to /upload and /fetch and continues polling after a tra
         globalThis.fetch = originalFetch
     }
 })
+
+test("returns Status Unknown when polling expires while backend is still pending", async () => {
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = async (input) => {
+        if (String(input).startsWith("/upload?job=")) {
+            return new Response("Uploaded")
+        }
+        return new Response(JSON.stringify({ status: "pending" }), {
+            headers: { "Content-Type": "application/json" },
+        })
+    }
+
+    try {
+        const result = await submitToBackendQueue({
+            problemId: "42",
+            problemTitle: "Add Two Integers",
+            code: "int add(int a, int b) { return a + b; }",
+            maxPolls: 2,
+        })
+        assert.equal(result.status, "Status Unknown")
+        assert.match(
+            result.compileError ?? "",
+            /Stopped waiting after polling window expired .* last status: pending/
+        )
+    } finally {
+        globalThis.fetch = originalFetch
+    }
+})
+
+test("returns Status Unknown with poll-failure message when /fetch requests keep aborting", async () => {
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = async (input) => {
+        if (String(input).startsWith("/upload?job=")) {
+            return new Response("Uploaded")
+        }
+        throw new DOMException("The operation timed out.", "TimeoutError")
+    }
+
+    try {
+        const result = await submitToBackendQueue({
+            problemId: "42",
+            problemTitle: "Add Two Integers",
+            code: "int add(int a, int b) { return a + b; }",
+            maxPolls: 2,
+        })
+        assert.equal(result.status, "Status Unknown")
+        assert.equal(
+            result.compileError,
+            "Unable to poll backend (/fetch) for grading status: HTTP requests timed out or failed."
+        )
+    } finally {
+        globalThis.fetch = originalFetch
+    }
+})
+
+test("reports upload timeout distinctly from connection failure", async () => {
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = async () => {
+        throw new DOMException("The operation timed out.", "TimeoutError")
+    }
+
+    try {
+        const result = await submitToBackendQueue({
+            problemId: "42",
+            problemTitle: "Add Two Integers",
+            code: "int add(int a, int b) { return a + b; }",
+        })
+        assert.equal(result.status, "Runtime Error")
+        assert.equal(
+            result.compileError,
+            "Upload to backend (/upload) timed out after 10s."
+        )
+    } finally {
+        globalThis.fetch = originalFetch
+    }
+})

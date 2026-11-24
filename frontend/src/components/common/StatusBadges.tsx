@@ -36,15 +36,17 @@ export function SubmissionStatusBadge({
     className?: string
 }) {
     const isPending = status === "Pending" || status === "In Progress"
-    const isLimit =
-        status === "Time Limit Exceeded" || status === "Memory Limit Exceeded"
+    const isWarning =
+        status === "Time Limit Exceeded" ||
+        status === "Memory Limit Exceeded" ||
+        status === "Status Unknown"
     const isError = status === "Compile Error" || status === "Runtime Error"
     const Icon =
         status === "Accepted"
             ? CheckCircle2
             : isPending
               ? Loader2
-              : isLimit
+              : isWarning
                 ? Clock
                 : isError
                   ? AlertTriangle
@@ -54,7 +56,7 @@ export function SubmissionStatusBadge({
             ? "bg-success/8 text-success"
             : isPending
               ? "bg-primary/8 text-primary"
-              : isLimit
+              : isWarning
                 ? "bg-warning/8 text-warning"
                 : "bg-destructive/8 text-destructive"
     return (

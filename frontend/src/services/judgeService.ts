@@ -16,12 +16,19 @@ export interface SubmitOptions {
     problemTitle: string
     code: string
     onStatusChange?: (status: SubmissionStatus, detail?: string) => void
+    maxPolls?: number
 }
 
 export async function submitToBackendQueue(
     options: SubmitOptions
 ): Promise<Submission> {
-    const { problemId, problemTitle, code, onStatusChange } = options
+    const {
+        problemId,
+        problemTitle,
+        code,
+        onStatusChange,
+        maxPolls = 75,
+    } = options
     const jobId = generateJobId()
     const timestamp = new Date().toLocaleTimeString([], {
         hour: "2-digit",
@@ -68,7 +75,8 @@ export async function submitToBackendQueue(
         )
 
         // Poll /fetch?job=
-        const maxPolls = 75
+        let lastSeenStatus: "pending" | "inprogress" | null = null
+        let hadFetchFailure = false
         for (let i = 0; i < maxPolls; i++) {
             let timeout = 800
             switch (i) {
@@ -90,9 +98,11 @@ export async function submitToBackendQueue(
                     signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
                 })
             } catch {
+                hadFetchFailure = true
                 continue
             }
             if (!fetchRes.ok) {
+                hadFetchFailure = true
                 continue
             }
 
@@ -113,6 +123,7 @@ export async function submitToBackendQueue(
                         "Invalid grading response from backend (/fetch).",
                 }
             }
+            hadFetchFailure = false
 
             if (data.status === "completed") {
                 const tests = data.results.tests
@@ -146,6 +157,7 @@ export async function submitToBackendQueue(
                         data.error || "Worker compilation/execution failure",
                 }
             } else {
+                lastSeenStatus = data.status
                 onStatusChange?.(
                     "In Progress",
                     `Worker status: ${data.status} (polling ${i + 1}/${maxPolls})...`
@@ -153,19 +165,25 @@ export async function submitToBackendQueue(
             }
         }
 
+        const timeoutMessage =
+            hadFetchFailure || lastSeenStatus === null
+                ? "Unable to poll backend (/fetch) for grading status: HTTP requests timed out or failed."
+                : `Stopped waiting after polling window expired (job ${jobId}, last status: ${lastSeenStatus}). The submission may still finish on the backend.`
+
         return {
             id: jobId,
             problemId,
             problemTitle,
             language: "C",
             code,
-            status: "Time Limit Exceeded",
+            status: "Status Unknown",
             timestamp,
             testsPassed: 0,
             totalTests: 0,
-            compileError: "Job polling timed out waiting for worker queue",
+            compileError: timeoutMessage,
         }
     } catch (err: unknown) {
+        const isTimeout = err instanceof Error && err.name === "TimeoutError"
         const message = err instanceof Error ? err.message : String(err)
         return {
             id: jobId,
@@ -177,7 +195,9 @@ export async function submitToBackendQueue(
             timestamp,
             testsPassed: 0,
             totalTests: 0,
-            compileError: `Could not connect to backend service (/upload): ${message}.\nEnsure backend HTTP server is running on port 3000.`,
+            compileError: isTimeout
+                ? `Upload to backend (/upload) timed out after ${UPLOAD_TIMEOUT_MS / 1000}s.`
+                : `Could not connect to backend service (/upload): ${message}.\nEnsure backend HTTP server is running on port 3000.`,
         }
     }
 }
