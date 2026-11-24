@@ -69,133 +69,102 @@ void on_fetch(fio_http_s *h) {
 
     printf("%.*s\n", (int) res_buf.len, res_buf.buf);
 
-    redisReply *res = gradcamp_redis_run_cmd("HGET job:%b status", res_buf.buf, res_buf.len);
-    if (!res) {
-        fprintf(stderr, "HGET job status command failed\n");
-        fio_http_status_set(h, 500);
-        fio_http_write(h, fio_string_from_cstr("Internal Server Error"), .finish = 1);
-        return;
+    redisReply *res = NULL;
+    yyjson_mut_doc *json = NULL;
+    yyjson_doc *results_json = NULL;
+    char *buf = NULL;
+    size_t len = 0;
+    int http_status = 500;
+    const char *err_msg = "Internal Server Error";
+    size_t err_len = sizeof("Internal Server Error") - 1;
+
+    res = gradcamp_redis_run_cmd("HMGET job:%b status results error", res_buf.buf, res_buf.len);
+    if (!res || res->type != REDIS_REPLY_ARRAY || res->elements != 3) {
+        fprintf(stderr, "HMGET job fields command failed\n");
+        goto cleanup;
     }
 
-    if (res->type == REDIS_REPLY_NIL) {
-        freeReplyObject(res);
-        fio_http_status_set(h, 404);
-        fio_http_write(h, fio_string_from_cstr("No job found!"), .finish = 1);
-        return;
+    redisReply *status_reply = res->element[0];
+    redisReply *results_reply = res->element[1];
+    redisReply *error_reply = res->element[2];
+
+    if (status_reply->type == REDIS_REPLY_NIL) {
+        http_status = 404;
+        err_msg = "No job found!";
+        err_len = sizeof("No job found!") - 1;
+        goto cleanup;
     }
-    if (res->type != REDIS_REPLY_STRING) {
-        fprintf(stderr, "HGET job status wasn't string...\n");
-        freeReplyObject(res);
-        fio_http_status_set(h, 500);
-        fio_http_write(h, fio_string_from_cstr("Internal Server Error"), .finish = 1);
-        return;
+    if (status_reply->type != REDIS_REPLY_STRING) {
+        fprintf(stderr, "HMGET job status wasn't string...\n");
+        goto cleanup;
     }
 
-    yyjson_mut_doc *json = yyjson_mut_doc_new(NULL);
+    bool is_completed = strcmp(status_reply->str, "completed") == 0;
+    bool is_failed = strcmp(status_reply->str, "failed") == 0;
+    bool is_pending_or_inprogress =
+        strcmp(status_reply->str, "pending") == 0 ||
+        strcmp(status_reply->str, "inprogress") == 0;
+
+    if (!is_completed && !is_failed && !is_pending_or_inprogress) {
+        err_msg = "Job is in an unknown state!";
+        err_len = sizeof("Job is in an unknown state!") - 1;
+        goto cleanup;
+    }
+
+    json = yyjson_mut_doc_new(NULL);
     yyjson_mut_val *json_root = json ? yyjson_mut_obj(json) : NULL;
-
     if (!json || !json_root) {
-        if (json) yyjson_mut_doc_free(json);
-        freeReplyObject(res);
-        fprintf(stderr, "Mutable JSON document instantation failed\n");
-        fio_http_status_set(h, 500);
-        fio_http_write(h, fio_string_from_cstr("Internal Server Error"), .finish = 1);
-        return;
+        fprintf(stderr, "Mutable JSON document instantiation failed\n");
+        goto cleanup;
     }
     yyjson_mut_doc_set_root(json, json_root);
 
-    if (strcmp(res->str, "completed") == 0) {
-        if (!yyjson_mut_obj_add_str(json, json_root, "status", "completed")) {
-            yyjson_mut_doc_free(json);
-            freeReplyObject(res);
-            fio_http_status_set(h, 500);
-            fio_http_write(h, fio_string_from_cstr("Internal Server Error"), .finish = 1);
-            return;
-        }
+    if (!yyjson_mut_obj_add_strncpy(json, json_root, "status", status_reply->str, status_reply->len)) {
+        goto cleanup;
+    }
 
-        redisReply *results_res = gradcamp_redis_run_cmd("HGET job:%b results", res_buf.buf, res_buf.len);
-        if (!results_res || results_res->type != REDIS_REPLY_STRING) {
-            if (results_res) freeReplyObject(results_res);
-            yyjson_mut_doc_free(json);
-            freeReplyObject(res);
+    if (is_completed) {
+        if (results_reply->type != REDIS_REPLY_STRING) {
             fprintf(stderr, "Failure to fetch results from datastore\n");
-            fio_http_status_set(h, 500);
-            fio_http_write(h, fio_string_from_cstr("Internal Server Error"), .finish = 1);
-            return;
+            goto cleanup;
         }
 
-        yyjson_doc *results_json = yyjson_read(results_res->str, results_res->len, 0);
+        results_json = yyjson_read(results_reply->str, results_reply->len, 0);
         yyjson_val *results_json_root = results_json ? yyjson_doc_get_root(results_json) : NULL;
-
         if (!results_json || !results_json_root) {
-            if (results_json) yyjson_doc_free(results_json);
-            freeReplyObject(results_res);
-            yyjson_mut_doc_free(json);
-            freeReplyObject(res);
             fprintf(stderr, "Failure to parse results JSON\n");
-            fio_http_status_set(h, 500);
-            fio_http_write(h, fio_string_from_cstr("Internal Server Error"), .finish = 1);
-            return;
+            goto cleanup;
         }
 
         yyjson_mut_val *mut_results_json_root = yyjson_val_mut_copy(json, results_json_root);
-        if (mut_results_json_root) {
-            yyjson_mut_obj_add_val(json, json_root, "results", mut_results_json_root);
+        if (!mut_results_json_root ||
+            !yyjson_mut_obj_add_val(json, json_root, "results", mut_results_json_root)) {
+            goto cleanup;
         }
-
-        yyjson_doc_free(results_json);
-        freeReplyObject(results_res);
-    } else if (strcmp(res->str, "inprogress") == 0) {
-        if (!yyjson_mut_obj_add_str(json, json_root, "status", "inprogress")) {
-            yyjson_mut_doc_free(json);
-            freeReplyObject(res);
-            fio_http_status_set(h, 500);
-            fio_http_write(h, fio_string_from_cstr("Internal Server Error"), .finish = 1);
-            return;
+    } else if (is_failed && error_reply->type == REDIS_REPLY_STRING) {
+        if (!yyjson_mut_obj_add_strncpy(json, json_root, "error", error_reply->str, error_reply->len)) {
+            goto cleanup;
         }
-    } else if (strcmp(res->str, "pending") == 0) {
-        if (!yyjson_mut_obj_add_str(json, json_root, "status", "pending")) {
-            yyjson_mut_doc_free(json);
-            freeReplyObject(res);
-            fio_http_status_set(h, 500);
-            fio_http_write(h, fio_string_from_cstr("Internal Server Error"), .finish = 1);
-            return;
-        }
-    } else if (strcmp(res->str, "failed") == 0) {
-        if (!yyjson_mut_obj_add_str(json, json_root, "status", "failed")) {
-            yyjson_mut_doc_free(json);
-            freeReplyObject(res);
-            fio_http_status_set(h, 500);
-            fio_http_write(h, fio_string_from_cstr("Internal Server Error"), .finish = 1);
-            return;
-        }
-        redisReply *err_res = gradcamp_redis_run_cmd("HGET job:%b error", res_buf.buf, res_buf.len);
-        if (err_res && err_res->type == REDIS_REPLY_STRING) {
-            yyjson_mut_obj_add_strcpy(json, json_root, "error", err_res->str);
-        }
-        if (err_res) freeReplyObject(err_res);
-    } else {
-        fio_http_status_set(h, 500);
-        fio_http_write(h, fio_string_from_cstr("Job is in an unknown state!"), .finish = 1);
-        freeReplyObject(res);
-        yyjson_mut_doc_free(json);
-        return;
     }
 
-    size_t len = 0;
-    char *buf = yyjson_mut_write(json, 0, &len);
-
-    yyjson_mut_doc_free(json);
-    freeReplyObject(res);
-
+    buf = yyjson_mut_write(json, 0, &len);
     if (!buf) {
-        fio_http_status_set(h, 500);
-        fio_http_write(h, fio_string_from_cstr("JSON serialization failed!"), .finish = 1);
-    } else {
+        err_msg = "JSON serialization failed!";
+        err_len = sizeof("JSON serialization failed!") - 1;
+    }
+
+cleanup:
+    if (results_json) yyjson_doc_free(results_json);
+    if (json) yyjson_mut_doc_free(json);
+    if (res) freeReplyObject(res);
+
+    if (buf) {
         fio_http_status_set(h, 200);
         fio_http_response_header_set(h, FIO_STR_INFO1("content-type"), FIO_STR_INFO1("application/json"));
-
         fio_http_write(h, .buf = buf, .len = len, .dealloc = free, .finish = 1);
+    } else {
+        fio_http_status_set(h, http_status);
+        fio_http_write(h, .buf = (char *) err_msg, .len = err_len, .finish = 1);
     }
 }
 
