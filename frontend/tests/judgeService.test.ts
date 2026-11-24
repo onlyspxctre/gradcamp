@@ -181,12 +181,12 @@ test("returns Status Unknown when polling expires while backend is still pending
             problemId: "42",
             problemTitle: "Add Two Integers",
             code: "int add(int a, int b) { return a + b; }",
-            maxPolls: 2,
+            observationBudgetMs: 300,
         })
         assert.equal(result.status, "Status Unknown")
         assert.match(
             result.compileError ?? "",
-            /Stopped waiting after polling window expired .* last status: pending/
+            /Stopped waiting after \d+s .* last status: pending/
         )
     } finally {
         globalThis.fetch = originalFetch
@@ -207,7 +207,7 @@ test("returns Status Unknown with poll-failure message when /fetch requests keep
             problemId: "42",
             problemTitle: "Add Two Integers",
             code: "int add(int a, int b) { return a + b; }",
-            maxPolls: 2,
+            observationBudgetMs: 300,
         })
         assert.equal(result.status, "Status Unknown")
         assert.equal(

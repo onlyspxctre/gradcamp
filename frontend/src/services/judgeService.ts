@@ -8,15 +8,18 @@ function generateJobId(): string {
     return "job" + Math.random().toString(36).substring(2, 14)
 }
 
+const OBSERVATION_BUDGET_MS = 75_000
 const UPLOAD_TIMEOUT_MS = 10_000
 const FETCH_TIMEOUT_MS = 5_000
+const BACKOFF_MS = [250, 500, 750] as const
+const STEADY_POLL_MS = 800
 
 export interface SubmitOptions {
     problemId: string
     problemTitle: string
     code: string
     onStatusChange?: (status: SubmissionStatus, detail?: string) => void
-    maxPolls?: number
+    observationBudgetMs?: number
 }
 
 export async function submitToBackendQueue(
@@ -27,7 +30,7 @@ export async function submitToBackendQueue(
         problemTitle,
         code,
         onStatusChange,
-        maxPolls = 75,
+        observationBudgetMs = OBSERVATION_BUDGET_MS,
     } = options
     const jobId = generateJobId()
     const timestamp = new Date().toLocaleTimeString([], {
@@ -74,28 +77,32 @@ export async function submitToBackendQueue(
             "Queued in Redis (jobs_pending). Waiting for worker..."
         )
 
-        // Poll /fetch?job=
+        // Poll /fetch?job= within a monotonic wall-clock observation budget
+        const pollStart = performance.now()
+        const deadline = pollStart + observationBudgetMs
+        const budgetSec = Math.round(observationBudgetMs / 1000)
         let lastSeenStatus: "pending" | "inprogress" | null = null
         let hadFetchFailure = false
-        for (let i = 0; i < maxPolls; i++) {
-            let timeout = 800
-            switch (i) {
-                case 0:
-                    timeout = 250;
-                    break;
-                case 1:
-                    timeout = 500;
-                    break;
-                case 2:
-                    timeout = 750;
-                    break;
-            }
-            await new Promise((r) => setTimeout(r, timeout))
+
+        for (let i = 0; ; i++) {
+            const remainingBeforeSleep = deadline - performance.now()
+            if (remainingBeforeSleep <= 0) break
+
+            const delayMs = Math.min(
+                BACKOFF_MS[i] ?? STEADY_POLL_MS,
+                remainingBeforeSleep
+            )
+            await new Promise((r) => setTimeout(r, delayMs))
+
+            const remainingBeforeFetch = deadline - performance.now()
+            if (remainingBeforeFetch <= 0) break
 
             let fetchRes: Response
             try {
                 fetchRes = await fetch(`/fetch?job=${jobId}`, {
-                    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+                    signal: AbortSignal.timeout(
+                        Math.min(FETCH_TIMEOUT_MS, remainingBeforeFetch)
+                    ),
                 })
             } catch {
                 hadFetchFailure = true
@@ -158,9 +165,12 @@ export async function submitToBackendQueue(
                 }
             } else {
                 lastSeenStatus = data.status
+                const elapsedSec = Math.floor(
+                    (performance.now() - pollStart) / 1000
+                )
                 onStatusChange?.(
                     "In Progress",
-                    `Worker status: ${data.status} (polling ${i + 1}/${maxPolls})...`
+                    `Worker status: ${data.status} (${elapsedSec}s / ${budgetSec}s)...`
                 )
             }
         }
@@ -168,7 +178,7 @@ export async function submitToBackendQueue(
         const timeoutMessage =
             hadFetchFailure || lastSeenStatus === null
                 ? "Unable to poll backend (/fetch) for grading status: HTTP requests timed out or failed."
-                : `Stopped waiting after polling window expired (job ${jobId}, last status: ${lastSeenStatus}). The submission may still finish on the backend.`
+                : `Stopped waiting after ${budgetSec}s (job ${jobId}, last status: ${lastSeenStatus}). The submission may still finish on the backend.`
 
         return {
             id: jobId,
