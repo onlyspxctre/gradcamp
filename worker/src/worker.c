@@ -183,12 +183,12 @@ static int mark_job_failed(const char *id, const char *message) {
 }
 
 static void run_container(const char *timeout_flag,
-                                const char *mount1,
-                                const char *mount2,
-                                const char *mount3,
-                                char *container_name,
-                                char *image,
-                                const char *err_label) {
+                          const char *mount1,
+                          const char *mount2,
+                          const char *mount3,
+                          char *container_name,
+                          char *image,
+                          const char *err_label) {
     char *args[] = {
         "podman",
         "run",
@@ -223,6 +223,71 @@ static void run_container(const char *timeout_flag,
     exit(1);
 }
 
+static int kill_container(const char *container_name) {
+    char *args_rm[] = {
+        "podman",
+        "rm",
+        "--force",
+        "--ignore",
+        (char *) container_name,
+        NULL,
+    };
+
+    char *args_check[] = {
+        "podman",
+        "container",
+        "exists",
+        (char *) container_name,
+        NULL,
+    };
+
+    pid_t pid = fork();
+    if (pid < 0) {
+        fprintf(stderr, "Kill fork failed for container %s\n", container_name);
+        return -1;
+    } else if (pid == 0) {
+        execvp(args_rm[0], args_rm);
+        fprintf(stderr, "Podman container force removal failed\n");
+        _exit(127);
+    }
+
+    int status = 0;
+    switch (wait_for_exit(pid, 1000 * 4, &status)) {
+        case WAIT_TIMEOUT:
+        case WAIT_ERROR:
+            terminate_and_reap(pid, false);
+            // TODO: enlist container for routine cleanup
+            return -1;
+        default:
+            break;
+    }
+
+    pid = fork();
+    if (pid < 0) {
+        fprintf(stderr, "Check fork failed for container %s\n", container_name);
+        return -1;
+    } else if (pid == 0) {
+        execvp(args_check[0], args_check);
+        fprintf(stderr, "Podman force removal check failed\n");
+        _exit(127);
+    }
+
+    switch(wait_for_exit(pid, 1000 * 1, &status)) {
+        case WAIT_EXITED:
+            if (WIFEXITED(status) && WEXITSTATUS(status) == 1) {
+                // container no longer exists yay
+                return 0;
+            }
+            fprintf(stderr, "Podman force removal check failed\n");
+            return -1;
+        case WAIT_TIMEOUT:
+        case WAIT_ERROR:
+            terminate_and_reap(pid, false);
+            fprintf(stderr, "Podman force removal check timed out\n");
+            return -1;
+    }
+}
+
 static void executor(const char *jobdir, const char *question_dir, char *container_name) {
     char bin_mount[256], out_mount[256], tests_mount[256];
     snprintf(bin_mount, sizeof(bin_mount), "type=bind,src=%s/bin,dst=/workspace/bin,ro,relabel=private", jobdir);
@@ -230,12 +295,12 @@ static void executor(const char *jobdir, const char *question_dir, char *contain
     snprintf(tests_mount, sizeof(tests_mount), "type=bind,src=./questions/%s/tests.json,dst=/workspace/tests.json,ro,relabel=shared", question_dir);
 
     run_container("--timeout=30",
-                        bin_mount,
-                        out_mount,
-                        tests_mount,
-                        container_name,
-                        "executor:latest",
-                        "Executor execvp failed");
+                  bin_mount,
+                  out_mount,
+                  tests_mount,
+                  container_name,
+                  "executor:latest",
+                  "Executor execvp failed");
 }
 
 static void compiler(const char *jobdir, const char *question_dir, char *container_name) {
@@ -245,12 +310,12 @@ static void compiler(const char *jobdir, const char *question_dir, char *contain
     snprintf(driver_mount, sizeof(driver_mount), "type=bind,src=./questions/%s/driver.c,dst=/workspace/driver/driver.c,ro,relabel=shared", question_dir);
 
     run_container("--timeout=10",
-                        src_mount,
-                        bin_mount,
-                        driver_mount,
-                        container_name,
-                        "compiler:latest",
-                        "Compiler execvp failed");
+                  src_mount,
+                  bin_mount,
+                  driver_mount,
+                  container_name,
+                  "compiler:latest",
+                  "Compiler execvp failed");
 }
 
 static void job(const char *id, const char *question_dir) {
@@ -333,15 +398,17 @@ static void job(const char *id, const char *question_dir) {
             break;
         case WAIT_TIMEOUT: {
             fprintf(stderr, "Compilation timed out for job %s\n", id);
-            mark_job_failed(id, "Compilation timed out");
             terminate_and_reap(pid, false);
+            kill_container(containers.compiler);
+            mark_job_failed(id, "Compilation timed out");
             return;
         }
         case WAIT_ERROR: {
             int wait_errno = errno;
             fprintf(stderr, "Compilation supervision failed for job %s: %s\n", id, strerror(wait_errno));
-            mark_job_failed(id, "Compilation failed");
             terminate_and_reap(pid, false);
+            kill_container(containers.compiler);
+            mark_job_failed(id, "Compilation failed");
             return;
         }
     }
@@ -372,14 +439,16 @@ static void job(const char *id, const char *question_dir) {
             break;
         case WAIT_TIMEOUT:
             fprintf(stderr, "Evaluation timed out for job %s\n", id);
-            mark_job_failed(id, "Evaluation timed out");
             terminate_and_reap(pid, false);
+            kill_container(containers.executor);
+            mark_job_failed(id, "Evaluation timed out");
             return;
         case WAIT_ERROR: {
             int wait_errno = errno;
             fprintf(stderr, "Evaluation supervision failed for job %s: %s\n", id, strerror(wait_errno));
-            mark_job_failed(id, "Evaluation failed");
             terminate_and_reap(pid, false);
+            kill_container(containers.executor);
+            mark_job_failed(id, "Evaluation failed");
             return;
         }
     }
