@@ -182,7 +182,7 @@ static int mark_job_failed(const char *id, const char *message) {
     return failed;
 }
 
-static void run_sandboxed_stage(const char *timeout_flag,
+static void run_container(const char *timeout_flag,
                                 const char *mount1,
                                 const char *mount2,
                                 const char *mount3,
@@ -229,7 +229,7 @@ static void executor(const char *jobdir, const char *question_dir, char *contain
     snprintf(out_mount, sizeof(out_mount), "type=bind,src=%s/out,dst=/workspace/out,rw,relabel=private", jobdir);
     snprintf(tests_mount, sizeof(tests_mount), "type=bind,src=./questions/%s/tests.json,dst=/workspace/tests.json,ro,relabel=shared", question_dir);
 
-    run_sandboxed_stage("--timeout=30",
+    run_container("--timeout=30",
                         bin_mount,
                         out_mount,
                         tests_mount,
@@ -244,7 +244,7 @@ static void compiler(const char *jobdir, const char *question_dir, char *contain
     snprintf(bin_mount, sizeof(bin_mount), "type=bind,src=%s/bin,dst=/workspace/bin,rw,relabel=private", jobdir);
     snprintf(driver_mount, sizeof(driver_mount), "type=bind,src=./questions/%s/driver.c,dst=/workspace/driver/driver.c,ro,relabel=shared", question_dir);
 
-    run_sandboxed_stage("--timeout=10",
+    run_container("--timeout=10",
                         src_mount,
                         bin_mount,
                         driver_mount,
@@ -331,11 +331,12 @@ static void job(const char *id, const char *question_dir) {
                 return;
             }
             break;
-        case WAIT_TIMEOUT:
+        case WAIT_TIMEOUT: {
             fprintf(stderr, "Compilation timed out for job %s\n", id);
             mark_job_failed(id, "Compilation timed out");
             terminate_and_reap(pid, false);
             return;
+        }
         case WAIT_ERROR: {
             int wait_errno = errno;
             fprintf(stderr, "Compilation supervision failed for job %s: %s\n", id, strerror(wait_errno));
@@ -427,7 +428,6 @@ static void job(const char *id, const char *question_dir) {
     reply = gradcamp_redis_run_cmd("HSET job:%s status completed results %b", id, results_buf, bytes_read);
     if (reply) freeReplyObject(reply);
     free(results_buf);
-
 }
 
 static volatile sig_atomic_t g_stop = 0;
