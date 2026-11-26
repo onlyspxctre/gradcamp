@@ -67,13 +67,13 @@ static int make_jobdirs(const char *id, char *path, size_t path_len) {
     memcpy(subpath, path, (size_t) n);
 
     appended = snprintf(subpath + n, path_len - (size_t) n, "/src");
-    if (appended < 0 || (size_t) (n + appended) >= path_len || (mkdir(subpath, 0755) != 0)) return -1;
+    if (appended < 0 || (size_t) (n + appended) >= path_len || (mkdir(subpath, 0755) != 0)) return -2;
 
     appended = snprintf(subpath + n, path_len - (size_t) n, "/bin");
-    if (appended < 0 || (size_t) (n + appended) >= path_len || (mkdir(subpath, 0755) != 0)) return -1;
+    if (appended < 0 || (size_t) (n + appended) >= path_len || (mkdir(subpath, 0755) != 0)) return -2;
 
     appended = snprintf(subpath + n, path_len - (size_t) n, "/out");
-    if (appended < 0 || (size_t) (n + appended) >= path_len || (mkdir(subpath, 0755) != 0)) return -1;
+    if (appended < 0 || (size_t) (n + appended) >= path_len || (mkdir(subpath, 0755) != 0)) return -2;
 
     return 0;
 }
@@ -130,6 +130,9 @@ static enum wait_result wait_for_exit(pid_t pid, int timeout_ms, int *status) {
 static bool terminate_and_reap(pid_t pid, bool reaped) {
     if (reaped) {
         return true;
+    }
+    if (pid <= 0) {
+        return false;
     }
 
     if (kill(pid, SIGKILL) == -1 && errno != ESRCH) {
@@ -272,7 +275,7 @@ static int kill_container(const char *container_name) {
         _exit(127);
     }
 
-    switch(wait_for_exit(pid, 1000 * 1, &status)) {
+    switch (wait_for_exit(pid, 1000 * 1, &status)) {
         case WAIT_EXITED:
             if (WIFEXITED(status) && WEXITSTATUS(status) == 1) {
                 // container no longer exists yay
@@ -286,6 +289,7 @@ static int kill_container(const char *container_name) {
             fprintf(stderr, "Podman force removal check timed out\n");
             return -1;
     }
+    return -1;
 }
 
 static void executor(const char *jobdir, const char *question_dir, char *container_name) {
@@ -319,21 +323,36 @@ static void compiler(const char *jobdir, const char *question_dir, char *contain
 }
 
 static void job(const char *id, const char *question_dir) {
+    const char *failure = NULL;
+    int jobdirs_exist = 0, compiler_open = 0, executor_open = 0;
+    pid_t pid = -1;
+
+    char *results_buf = NULL;
+    size_t bytes_read = 0;
+
     // 1. Ensure scratch directories exist
     char jobdir[160];
-    if (make_jobdirs(id, jobdir, sizeof(jobdir)) != 0) {
-        fprintf(stderr, "Failed to create directory structure for job %s\n", id);
-        mark_job_failed(id, "Failed to create job directories on worker");
-        return;
+    {
+        int status = 0;
+        if ((status = make_jobdirs(id, jobdir, sizeof(jobdir))) < 0) {
+            if (status == -2) {
+                // mkdtemp succeeded but mkdir failed
+                jobdirs_exist = 1;
+            }
+            fprintf(stderr, "Failed to create directory structure for job %s\n", id);
+            failure = "Failed to create job directories on worker";
+            goto done;
+        }
     }
+    jobdirs_exist = 1;
 
     // 2. Fetch submitted source from Redis
     redisReply *reply = gradcamp_redis_run_cmd("HGET job:%s source", id);
     if (!reply || reply->type != REDIS_REPLY_STRING) {
         fprintf(stderr, "Failed to fetch source for job %s from datastore\n", id);
         if (reply) freeReplyObject(reply);
-        mark_job_failed(id, "Source code not found in datastore");
-        return;
+        failure = "Source code not found in datastore";
+        goto done;
     }
 
     char src_file[sizeof(jobdir) + sizeof("/src/main.c") - 1];
@@ -341,23 +360,23 @@ static void job(const char *id, const char *question_dir) {
     if (n < 0 || (size_t) n >= sizeof(src_file)) {
         fprintf(stderr, "Failed to build src_file path for job %s\n", id);
         freeReplyObject(reply);
-        mark_job_failed(id, "Failed to build src_file path for job");
-        return;
+        failure = "Failed to build src_file path for job";
+        goto done;
     }
     FILE *fp = fopen(src_file, "wb");
     if (!fp) {
         perror("Failed to create source file");
         freeReplyObject(reply);
-        mark_job_failed(id, "Failed to create source file on worker");
-        return;
+        failure = "Failed to create source file on worker";
+        goto done;
     }
 
     if (fwrite(reply->str, 1, reply->len, fp) != (size_t) reply->len) {
         perror("Failed to write source file");
         fclose(fp);
         freeReplyObject(reply);
-        mark_job_failed(id, "Failed to write source file on worker");
-        return;
+        failure = "Failed to write source file on worker";
+        goto done;
     }
     fclose(fp);
     freeReplyObject(reply);
@@ -366,24 +385,26 @@ static void job(const char *id, const char *question_dir) {
     if (make_container_names(&containers) != 0) {
         int saved_errno = errno;
         fprintf(stderr, "Failed to generate container names for job %s: %s\n", id, strerror(saved_errno));
-        mark_job_failed(id, "Failed to generate container names on worker");
-        return;
+        failure = "Failed to generate container names on worker";
+        goto done;
     }
     fprintf(stderr, "Job %s containers: compiler=%s executor=%s\n", id, containers.compiler, containers.executor);
 
     // 3. Compile
-    pid_t pid = fork();
+    pid = fork();
     if (pid < 0) {
         fprintf(stderr, "Compiler fork failed for job %s\n", id);
-        mark_job_failed(id, "Compiler process fork failed");
-        return;
+        failure = "Compiler process fork failed";
+        goto done;
     } else if (pid == 0) {
         compiler(jobdir, question_dir, containers.compiler);
     }
+    compiler_open = 1;
 
     int status = 0;
     switch (wait_for_exit(pid, 10 * 1000, &status)) {
         case WAIT_EXITED:
+            pid = -1;
             if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
                 if (WIFEXITED(status)) {
                     fprintf(stderr, "Compilation failed for job %s (exit code %d)\n", id, WEXITSTATUS(status));
@@ -392,24 +413,20 @@ static void job(const char *id, const char *question_dir) {
                 } else {
                     fprintf(stderr, "Unexpected compilation wait status %#x for job %s\n", status, id);
                 }
-                mark_job_failed(id, "Compilation failed");
-                return;
+                failure = "Compilation failed";
+                goto done;
             }
             break;
         case WAIT_TIMEOUT: {
             fprintf(stderr, "Compilation timed out for job %s\n", id);
-            terminate_and_reap(pid, false);
-            kill_container(containers.compiler);
-            mark_job_failed(id, "Compilation timed out");
-            return;
+            failure = "Compilation timed out";
+            goto done;
         }
         case WAIT_ERROR: {
             int wait_errno = errno;
             fprintf(stderr, "Compilation supervision failed for job %s: %s\n", id, strerror(wait_errno));
-            terminate_and_reap(pid, false);
-            kill_container(containers.compiler);
-            mark_job_failed(id, "Compilation failed");
-            return;
+            failure = "Compilation failed";
+            goto done;
         }
     }
 
@@ -417,14 +434,16 @@ static void job(const char *id, const char *question_dir) {
     pid = fork();
     if (pid < 0) {
         fprintf(stderr, "Executor fork failed for job %s\n", id);
-        mark_job_failed(id, "Runner process fork failed");
-        return;
+        failure = "Runner process fork failed";
+        goto done;
     } else if (pid == 0) {
         executor(jobdir, question_dir, containers.executor);
     }
+    executor_open = 1;
 
     switch (wait_for_exit(pid, 30 * 1000, &status)) {
         case WAIT_EXITED:
+            pid = -1;
             if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
                 if (WIFEXITED(status)) {
                     fprintf(stderr, "Evaluation failed for job %s (exit code %d)\n", id, WEXITSTATUS(status));
@@ -433,23 +452,19 @@ static void job(const char *id, const char *question_dir) {
                 } else {
                     fprintf(stderr, "Unexpected evaluation wait status %#x for job %s\n", status, id);
                 }
-                mark_job_failed(id, "Evaluation failed");
-                return;
+                failure = "Evaluation failed";
+                goto done;
             }
             break;
         case WAIT_TIMEOUT:
             fprintf(stderr, "Evaluation timed out for job %s\n", id);
-            terminate_and_reap(pid, false);
-            kill_container(containers.executor);
-            mark_job_failed(id, "Evaluation timed out");
-            return;
+            failure = "Evaluation timed out";
+            goto done;
         case WAIT_ERROR: {
             int wait_errno = errno;
             fprintf(stderr, "Evaluation supervision failed for job %s: %s\n", id, strerror(wait_errno));
-            terminate_and_reap(pid, false);
-            kill_container(containers.executor);
-            mark_job_failed(id, "Evaluation failed");
-            return;
+            failure = "Evaluation failed";
+            goto done;
         }
     }
 
@@ -458,14 +473,14 @@ static void job(const char *id, const char *question_dir) {
     n = snprintf(out_file, sizeof(out_file), "%s/out/results.json", jobdir);
     if (n < 0 || (size_t) n >= sizeof(out_file)) {
         fprintf(stderr, "Failed to build out_file path for job %s\n", id);
-        mark_job_failed(id, "Failed to build out_file path for job");
-        return;
+        failure = "Failed to build out_file path for job";
+        goto done;
     }
     FILE *rf = fopen(out_file, "rb");
     if (!rf) {
         fprintf(stderr, "Failed to open results file for job %s\n", id);
-        mark_job_failed(id, "Results file not generated");
-        return;
+        failure = "Failed to generate results.json";
+        goto done;
     }
 
     fseek(rf, 0, SEEK_END);
@@ -474,26 +489,44 @@ static void job(const char *id, const char *question_dir) {
 
     if (rlen <= 0) {
         fclose(rf);
-        mark_job_failed(id, "Results file was empty");
-        return;
+        failure = "Results file was empty";
+        goto done;
     }
 
-    char *results_buf = malloc((size_t) rlen + 1);
+    results_buf = malloc((size_t) rlen + 1);
     if (!results_buf) {
         fclose(rf);
-        mark_job_failed(id, "Memory allocation error");
-        return;
+        failure = "Results malloc error";
+        goto done;
     }
 
-    size_t bytes_read = fread(results_buf, 1, (size_t) rlen, rf);
+    bytes_read = fread(results_buf, 1, (size_t) rlen, rf);
     fclose(rf);
     results_buf[bytes_read] = '\0';
 
-    if (nftw(jobdir, remove_cb, 16, FTW_DEPTH | FTW_PHYS) != 0) {
-        fprintf(stderr, "Failed to remove scratch directory %s: %s\n", jobdir, strerror(errno));
+done:;
+    if (pid > 0 && terminate_and_reap(pid, false)) {
+        pid = -1;
+    }
+    int compiler_killed = compiler_open ? kill_container(containers.compiler) : 0;
+    int executor_killed = executor_open ? kill_container(containers.executor) : 0;
+    if (jobdirs_exist && pid == -1 && compiler_killed == 0 && executor_killed == 0) {
+        if (nftw(jobdir, remove_cb, 16, FTW_DEPTH | FTW_PHYS) != 0) {
+            fprintf(stderr, "Failed to remove scratch directory %s: %s\n", jobdir, strerror(errno));
+        }
+    }
+
+    if (failure) {
+        mark_job_failed(id, failure);
+        return;
     }
 
     // 6. Save results and update status
+    if (!results_buf) {
+        mark_job_failed(id, "results_buf was NULL");
+        return;
+    }
+
     reply = gradcamp_redis_run_cmd("HSET job:%s status completed results %b", id, results_buf, bytes_read);
     if (reply) freeReplyObject(reply);
     free(results_buf);
