@@ -53,22 +53,26 @@ static int make_container_names(struct container_names *containers) {
     return 0;
 }
 
-static int ensure_job_dirs(const char *id) {
-    char path[160];
-    int n = snprintf(path, sizeof(path), "./job/%s", id);
-    if (n < 0 || (size_t) n >= sizeof(path)) return -1;
+static int make_jobdirs(const char *id, char *path, size_t path_len) {
+    int n;
+    int appended;
 
-    if (mkdir("./job", 0755) != 0 && errno != EEXIST) return -1;
-    if (mkdir(path, 0755) != 0 && errno != EEXIST) return -1;
+    n = snprintf(path, path_len, "/tmp/gradcamp-%s-XXXXXX", id);
+    if (n < 0 || (size_t) n >= path_len) return -1;
 
-    n = snprintf(path, sizeof(path), "./job/%s/src", id);
-    if (n < 0 || (size_t) n >= sizeof(path) || (mkdir(path, 0755) != 0 && errno != EEXIST)) return -1;
+    if (!mkdtemp(path)) return -1;
 
-    n = snprintf(path, sizeof(path), "./job/%s/bin", id);
-    if (n < 0 || (size_t) n >= sizeof(path) || (mkdir(path, 0755) != 0 && errno != EEXIST)) return -1;
+    char subpath[path_len];
+    memcpy(subpath, path, (size_t) n);
 
-    n = snprintf(path, sizeof(path), "./job/%s/out", id);
-    if (n < 0 || (size_t) n >= sizeof(path) || (mkdir(path, 0755) != 0 && errno != EEXIST)) return -1;
+    appended = snprintf(subpath + n, path_len - (size_t) n, "/src");
+    if (appended < 0 || (size_t) (n + appended) >= path_len || (mkdir(subpath, 0755) != 0)) return -1;
+
+    appended = snprintf(subpath + n, path_len - (size_t) n, "/bin");
+    if (appended < 0 || (size_t) (n + appended) >= path_len || (mkdir(subpath, 0755) != 0)) return -1;
+
+    appended = snprintf(subpath + n, path_len - (size_t) n, "/out");
+    if (appended < 0 || (size_t) (n + appended) >= path_len || (mkdir(subpath, 0755) != 0)) return -1;
 
     return 0;
 }
@@ -211,10 +215,10 @@ static void run_sandboxed_stage(const char *timeout_flag,
     exit(1);
 }
 
-static void executor(const char *id, const char *question_dir, char *container_name) {
+static void executor(const char *jobdir, const char *question_dir, char *container_name) {
     char bin_mount[256], out_mount[256], tests_mount[256];
-    snprintf(bin_mount, sizeof(bin_mount), "type=bind,src=./job/%s/bin,dst=/workspace/bin,ro,relabel=private", id);
-    snprintf(out_mount, sizeof(out_mount), "type=bind,src=./job/%s/out,dst=/workspace/out,rw,relabel=private", id);
+    snprintf(bin_mount, sizeof(bin_mount), "type=bind,src=%s/bin,dst=/workspace/bin,ro,relabel=private", jobdir);
+    snprintf(out_mount, sizeof(out_mount), "type=bind,src=%s/out,dst=/workspace/out,rw,relabel=private", jobdir);
     snprintf(tests_mount, sizeof(tests_mount), "type=bind,src=./questions/%s/tests.json,dst=/workspace/tests.json,ro,relabel=shared", question_dir);
 
     run_sandboxed_stage("--timeout=30",
@@ -226,10 +230,10 @@ static void executor(const char *id, const char *question_dir, char *container_n
                         "Executor execvp failed");
 }
 
-static void compiler(const char *id, const char *question_dir, char *container_name) {
+static void compiler(const char *jobdir, const char *question_dir, char *container_name) {
     char src_mount[256], bin_mount[256], driver_mount[256];
-    snprintf(src_mount, sizeof(src_mount), "type=bind,src=./job/%s/src,dst=/workspace/src,ro,relabel=private", id);
-    snprintf(bin_mount, sizeof(bin_mount), "type=bind,src=./job/%s/bin,dst=/workspace/bin,rw,relabel=private", id);
+    snprintf(src_mount, sizeof(src_mount), "type=bind,src=%s/src,dst=/workspace/src,ro,relabel=private", jobdir);
+    snprintf(bin_mount, sizeof(bin_mount), "type=bind,src=%s/bin,dst=/workspace/bin,rw,relabel=private", jobdir);
     snprintf(driver_mount, sizeof(driver_mount), "type=bind,src=./questions/%s/driver.c,dst=/workspace/driver/driver.c,ro,relabel=shared", question_dir);
 
     run_sandboxed_stage("--timeout=10",
@@ -243,7 +247,8 @@ static void compiler(const char *id, const char *question_dir, char *container_n
 
 static void job(const char *id, const char *question_dir) {
     // 1. Ensure scratch directories exist
-    if (ensure_job_dirs(id) != 0) {
+    char jobdir[160];
+    if (make_jobdirs(id, jobdir, sizeof(jobdir)) != 0) {
         fprintf(stderr, "Failed to create directory structure for job %s\n", id);
         mark_job_failed(id, "Failed to create job directories on worker");
         return;
@@ -258,8 +263,14 @@ static void job(const char *id, const char *question_dir) {
         return;
     }
 
-    char src_file[160];
-    snprintf(src_file, sizeof(src_file), "./job/%s/src/main.c", id);
+    char src_file[sizeof(jobdir) + sizeof("/src/main.c") - 1];
+    int n = snprintf(src_file, sizeof(src_file), "%s/src/main.c", jobdir);
+    if (n < 0 || (size_t) n >= sizeof(src_file)) {
+        fprintf(stderr, "Failed to build src_file path for job %s\n", id);
+        freeReplyObject(reply);
+        mark_job_failed(id, "Failed to build src_file path for job");
+        return;
+    }
     FILE *fp = fopen(src_file, "wb");
     if (!fp) {
         perror("Failed to create source file");
@@ -294,7 +305,7 @@ static void job(const char *id, const char *question_dir) {
         mark_job_failed(id, "Compiler process fork failed");
         return;
     } else if (pid == 0) {
-        compiler(id, question_dir, containers.compiler);
+        compiler(jobdir, question_dir, containers.compiler);
     }
 
     int status = 0;
@@ -333,7 +344,7 @@ static void job(const char *id, const char *question_dir) {
         mark_job_failed(id, "Runner process fork failed");
         return;
     } else if (pid == 0) {
-        executor(id, question_dir, containers.executor);
+        executor(jobdir, question_dir, containers.executor);
     }
 
     switch (wait_for_exit(pid, 30 * 1000, &status)) {
@@ -365,8 +376,13 @@ static void job(const char *id, const char *question_dir) {
     }
 
     // 5. Read results.json
-    char out_file[160];
-    snprintf(out_file, sizeof(out_file), "./job/%s/out/results.json", id);
+    char out_file[sizeof(jobdir) + sizeof("/out/results.json") - 1];
+    n = snprintf(out_file, sizeof(out_file), "%s/out/results.json", jobdir);
+    if (n < 0 || (size_t) n >= sizeof(out_file)) {
+        fprintf(stderr, "Failed to build out_file path for job %s\n", id);
+        mark_job_failed(id, "Failed to build out_file path for job");
+        return;
+    }
     FILE *rf = fopen(out_file, "rb");
     if (!rf) {
         fprintf(stderr, "Failed to open results file for job %s\n", id);
