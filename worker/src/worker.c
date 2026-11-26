@@ -3,6 +3,7 @@
 
 #include <ctype.h>
 #include <errno.h>
+#include <ftw.h>
 #include <hiredis.h>
 #include <poll.h>
 #include <signal.h>
@@ -75,6 +76,13 @@ static int make_jobdirs(const char *id, char *path, size_t path_len) {
     if (appended < 0 || (size_t) (n + appended) >= path_len || (mkdir(subpath, 0755) != 0)) return -1;
 
     return 0;
+}
+
+static int remove_cb(const char *path, const struct stat *st, int type, struct FTW *info) {
+    (void) st;
+    (void) type;
+    (void) info;
+    return remove(path);
 }
 
 static int64_t monotonic_ms(void) {
@@ -411,10 +419,15 @@ static void job(const char *id, const char *question_dir) {
     fclose(rf);
     results_buf[bytes_read] = '\0';
 
+    if (nftw(jobdir, remove_cb, 16, FTW_DEPTH | FTW_PHYS) != 0) {
+        fprintf(stderr, "Failed to remove scratch directory %s: %s\n", jobdir, strerror(errno));
+    }
+
     // 6. Save results and update status
     reply = gradcamp_redis_run_cmd("HSET job:%s status completed results %b", id, results_buf, bytes_read);
     if (reply) freeReplyObject(reply);
     free(results_buf);
+
 }
 
 static volatile sig_atomic_t g_stop = 0;
