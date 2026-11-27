@@ -1,4 +1,4 @@
-.PHONY: all clean
+.PHONY: all clean test
 
 BUILDDIR ?= $(abspath ../build)
 OBJDIR ?= $(abspath ../obj)
@@ -18,5 +18,17 @@ $(BUILDDIR)/worker: $(SRCDIR)/worker.c $(COMMON_HDRS) $(COMMON_OBJ)
 	mkdir -p $(BUILDDIR)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $< $(LDLIBS)
 
+test: $(BUILDDIR)/container_identity_test $(BUILDDIR)/scratch_cleanup_test
+	$(BUILDDIR)/container_identity_test
+	$(BUILDDIR)/scratch_cleanup_test
+
+$(BUILDDIR)/container_identity_test: tests/container_identity_test.c $(SRCDIR)/worker.c $(COMMON_HDRS) $(COMMON_OBJ)
+	mkdir -p $(BUILDDIR)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $< $(LDLIBS)
+
+$(BUILDDIR)/scratch_cleanup_test: tests/scratch_cleanup_test.c $(SRCDIR)/worker.c $(COMMON_HDRS)
+	mkdir -p $(BUILDDIR)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $< $(shell pkg-config --libs $(LIBS)) -lm
+
 clean:
-	rm -f $(BUILDDIR)/worker
+	rm -f $(BUILDDIR)/worker $(BUILDDIR)/container_identity_test $(BUILDDIR)/scratch_cleanup_test

@@ -18,6 +18,10 @@ Run `./build_images.sh` before first use and after changing an image's Dockerfil
 
 A coding question's frontend `id` is its grading ID. The frontend sends it as `question` in `POST /upload?job=<job-id>&question=<grading-id>`. Register each ID and directory in `common/questions.h` and add its frontend catalog entry. The API rejects missing or unknown IDs, and the worker resolves the queued ID using the same registry. The coding catalog includes Add Two Integers, Largest of Three, Count Digits, Count Occurrences, and Swap Two Integers.
 
+## Worker tests
+
+Run `make common && make -C worker test` for the container identity and scratch cleanup tests. They use fake Podman commands and do not require a running container runtime or Redis. The cleanup tests exercise real temporary directories and cover normal completion, grading failures, watchdog timeouts, uncertain container removal, and partial setup failure.
+
 ## JavaScript tooling
 
 [Bun](https://bun.sh/) (1.4.4 or newer) is the frontend runtime, package manager, bundler, development server, and unit test runner. Use `bun install` in `frontend`, then `bun run dev`. Frontend tooling, including Playwright, runs on Bun without a separate Node.js installation. See the [frontend setup and testing guide](frontend/README.md) for build, preview, and test commands.
