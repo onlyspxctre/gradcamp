@@ -66,7 +66,7 @@ Use **Submit** (or **Ctrl/Cmd + Enter**) to evaluate a code solution against the
 
 `src/services/judgeContract.ts` validates the current `/fetch` response before `judgeService.ts` creates a submission. Pending/in-progress responses contain a lifecycle status; failed jobs may contain a top-level `error`. Completed responses must contain a nonempty `results.tests` array whose entries have a string `name`, boolean `passed`, and string `error` (empty for a passing test). Additional fields are ignored. Malformed JSON or invalid response fields produce an explicit protocol-error message instead of a fabricated test result.
 
-Per-test diagnostics are retained in history and rendered as plain text in both result panes. The evaluator does not currently emit separate `output`, `expected`, or timing fields. This consumer change does not alter backend behavior, polling budgets, or existing verdict labels: failed tests still map to Wrong Answer and failed jobs to Compile Error. Diagnostic strings are not parsed to infer verdicts; authoritative typed verdicts remain deferred.
+Per-test diagnostics are retained in history and rendered as plain text in both result panes. The evaluator does not emit separate `output`, `expected`, or timing fields. Failed tests map to Wrong Answer and failed jobs to Compile Error; if the frontend stops waiting without a terminal response, it reports Status Unknown rather than a grading verdict. Diagnostic strings are not parsed to infer verdicts.
 
 `tests/judgeContract.test.ts` and `tests/judgeService.test.ts` cover response validation and diagnostic preservation. `e2e/grading-diagnostics.spec.ts` checks both result views, including safe rendering of HTML-like output and malformed responses.
 
@@ -91,7 +91,7 @@ Bun serves the frontend for these paths in development and preview. If deploying
 
 The Assignments page includes three formats:
 
-- **Code** — the existing Add Two Integers workspace and backend judge.
+- **Code** — registered C exercises with a shared editor workspace and backend judge.
 - **Lecture** — Pointers: the basics, with five stepped/optional-playback sections, code traces, animated memory cells, and an explicit completion action.
 - **Quiz** — Pointers: memory lab, with six questions using address sliders, selectable memory cells, numeric answers, and multiple choice. Each answer has feedback and retries. Results distinguish the first-try score from eventual completion.
 

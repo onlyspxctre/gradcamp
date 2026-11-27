@@ -16,7 +16,7 @@ Each test has a `name`, an `args` array of strings passed to the driver as separ
 
 Run `./build_images.sh` before first use and after changing an image's Dockerfile, `compile.sh`, or the shared evaluator source. Use the same user account that runs the worker, since rootless Podman images are stored per user. `./start_dev.sh` checks the native binaries with `make` but does not rebuild images. No per-question evaluator build is needed. Run the native evaluator tests with `python3 evaluator/tests/test_evaluator.py` (requires a C compiler and `yyjson` development files).
 
-A coding question's frontend `id` is its grading ID. The frontend sends it as `question` in `POST /upload?job=<job-id>&question=<grading-id>`. Register each ID and directory in `common/questions.h` and add its frontend catalog entry. The API rejects missing or unknown IDs, and the worker resolves the queued ID using the same registry. The coding catalog includes Add Two Integers, Largest of Three, Count Digits, Count Occurrences, and Swap Two Integers.
+A coding question's frontend `id` is its grading ID. The frontend sends the source as plain text to `POST /upload?question=<grading-id>`. The API returns a server-generated job ID, which the frontend uses to poll `GET /fetch?job=<job-id>`. Register each grading ID and directory in `common/questions.h` and add a matching frontend catalog entry. The API rejects missing or unknown question IDs, and the worker resolves the queued question ID using the same registry.
 
 ## Worker tests
 
