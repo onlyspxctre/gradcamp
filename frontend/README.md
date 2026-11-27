@@ -1,6 +1,19 @@
 # Frontend
 
-Gradcamp frontend sub-project built with React, Bun, TypeScript, Tailwind CSS, shadcn/ui, and Lucide icons.
+Gradcamp’s web frontend for coding exercises, interactive lectures, and quizzes.
+
+## Tech Stack & Dependencies
+
+| Area | Tools and purpose |
+| --- | --- |
+| App | React and React DOM render the UI; TypeScript checks application and tooling code. |
+| Runtime and builds | Bun runs the dev and preview servers, installs dependencies, and bundles the app. `bun-plugin-tailwind` integrates Tailwind CSS v4 with Bun. |
+| Code editor | `@monaco-editor/react` embeds Monaco for editing C submissions. |
+| Interactive visuals | Motion (`motion`) animates walkthroughs and memory diagrams. |
+| UI and styling | shadcn/ui components use Radix primitives; `lucide-react` supplies icons. `class-variance-authority` and `cn` compose styles, `tw-animate-css` adds animation utilities, and Fontsource packages bundle the fonts. |
+| Checks and tests | ESLint and Prettier lint and format the code. Bun runs unit tests; Playwright runs browser tests in Chromium. |
+
+See [`package.json`](package.json) for the complete dependency list and version requirements.
 
 ## Getting Started
 
@@ -55,8 +68,6 @@ To run the same browser suite against a production build instead of the developm
 bun run build
 FRONTEND_PREVIEW=1 bun run test:e2e
 ```
-
-TypeScript, ESLint, Prettier, and Playwright remain separate dependencies because Bun's bundler/test runner does not replace their type checking, linting, formatting, or browser automation.
 
 ## Code submissions
 
